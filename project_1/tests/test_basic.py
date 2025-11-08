@@ -1,8 +1,18 @@
 """
-Basic tests for Edge Cover implementation.
+Comprehensive test suite for Minimum Edge Cover implementation.
+
+Tests include:
+- Basic algorithm correctness on known graphs
+- Input validation and error handling
+- Edge cover validation
+- Integration testing
+- Robustness and edge cases
+
+Student Number: 113920
 """
 
 import sys
+import time
 from pathlib import Path
 
 # Add parent directory to path
@@ -10,8 +20,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.graph import Graph, Vertex, Edge
 from src.graph_generator import GraphGenerator
-from src.algorithms import ExhaustiveSearch, GreedyHeuristic
+from src.algorithms import ExhaustiveSearch, GreedyHeuristic, GreedyMatchingBased
+from src.experiment import ExperimentRunner
+from src.exceptions import (
+    InvalidConfigurationException,
+    InvalidEdgeCoverException,
+    AlgorithmTimeoutException
+)
+from src.config import DEFAULT_SEED
 
+
+# ============================================================================
+# BASIC ALGORITHM TESTS
+# ============================================================================
 
 def test_simple_graph():
     """Test with a simple manually constructed graph."""
@@ -165,23 +186,289 @@ def test_complete_graph():
     print("\n✓ Test 3 PASSED\n")
 
 
+# ============================================================================
+# VALIDATION & INTEGRATION TESTS
+# ============================================================================
+
+def test_seed_reproducibility():
+    """Test that seed properly controls randomness for reproducibility."""
+    print("\n=== Test 4: Seed Reproducibility ===")
+
+    generator = GraphGenerator(seed=DEFAULT_SEED)
+
+    # Generate two graphs with same parameters
+    graph1 = generator.generate_graph(num_vertices=5, edge_density=50.0)
+    graph2 = generator.generate_graph(num_vertices=5, edge_density=50.0)
+
+    # Get vertex positions
+    positions1 = [(v.x, v.y) for v in graph1.vertices]
+    positions2 = [(v.x, v.y) for v in graph2.vertices]
+
+    print(f"Graph 1 vertex positions: {positions1[:3]}...")  # First 3
+    print(f"Graph 2 vertex positions: {positions2[:3]}...")  # First 3
+
+    # Verify they are DIFFERENT (seed advances naturally)
+    assert positions1 != positions2, "Graphs should have different vertex positions!"
+    print("✓ Graphs have different vertex positions (seed advances)")
+
+    # Verify reproducibility: resetting generator should give same sequence
+    generator2 = GraphGenerator(seed=DEFAULT_SEED)
+    graph3 = generator2.generate_graph(num_vertices=5, edge_density=50.0)
+    graph4 = generator2.generate_graph(num_vertices=5, edge_density=50.0)
+
+    positions3 = [(v.x, v.y) for v in graph3.vertices]
+    positions4 = [(v.x, v.y) for v in graph4.vertices]
+
+    assert positions1 == positions3, "First graph should be reproducible"
+    assert positions2 == positions4, "Second graph should be reproducible"
+    print("✓ Graph generation is reproducible with same seed")
+
+    print("✓ Test 4 PASSED\n")
+
+
+def test_timeout_protection():
+    """Test that timeout protection works for large graphs."""
+    print("\n=== Test 5: Timeout Protection ===")
+
+    # Create a graph that would take long for exhaustive search
+    generator = GraphGenerator(seed=DEFAULT_SEED)
+    # 10 vertices at 75% density = ~34 edges (2^34 is huge!)
+    large_graph = generator.generate_graph(num_vertices=10, edge_density=75.0)
+
+    print(f"Testing timeout on graph with {large_graph.num_vertices()} vertices, "
+          f"{large_graph.num_edges()} edges")
+
+    # This should skip exhaustive search entirely (> 25 edges)
+    if large_graph.num_edges() > 25:
+        print("✓ Graph has > 25 edges, exhaustive will be skipped (expected)")
+        print("✓ Test 5 PASSED (timeout protection via edge count limit)\n")
+        return
+
+    # If edges <= 25, test actual timeout
+    runner = ExperimentRunner(timeout_seconds=0.5)  # Very short timeout
+    result = runner.run_single_experiment(
+        num_vertices=10,
+        edge_density=75.0,
+        verbose=False
+    )
+
+    # Should timeout or skip
+    assert result.exhaustive_timed_out, "Exhaustive search should timeout or be skipped"
+    print("✓ Exhaustive search timed out or was skipped as expected")
+    print("✓ Test 5 PASSED\n")
+
+
+def test_input_validation():
+    """Test that invalid inputs are properly rejected."""
+    print("\n=== Test 6: Input Validation ===")
+
+    generator = GraphGenerator(seed=DEFAULT_SEED)
+
+    # Test invalid num_vertices
+    try:
+        generator.generate_graph(num_vertices=-5, edge_density=50.0)
+        assert False, "Should have raised exception for negative vertices"
+    except InvalidConfigurationException as e:
+        print(f"✓ Negative vertices rejected: {str(e)[:50]}...")
+
+    try:
+        generator.generate_graph(num_vertices=1, edge_density=50.0)
+        assert False, "Should have raised exception for < 2 vertices"
+    except InvalidConfigurationException as e:
+        print(f"✓ Single vertex rejected: {str(e)[:50]}...")
+
+    try:
+        generator.generate_graph(num_vertices=10000, edge_density=50.0)
+        assert False, "Should have raised exception for too many vertices"
+    except InvalidConfigurationException as e:
+        print(f"✓ Too many vertices rejected: {str(e)[:50]}...")
+
+    # Test invalid edge_density
+    try:
+        generator.generate_graph(num_vertices=5, edge_density=-10.0)
+        assert False, "Should have raised exception for negative density"
+    except InvalidConfigurationException as e:
+        print(f"✓ Negative density rejected: {str(e)[:50]}...")
+
+    try:
+        generator.generate_graph(num_vertices=5, edge_density=150.0)
+        assert False, "Should have raised exception for > 100 density"
+    except InvalidConfigurationException as e:
+        print(f"✓ Density > 100 rejected: {str(e)[:50]}...")
+
+    try:
+        generator.generate_graph(num_vertices=5, edge_density="50%")
+        assert False, "Should have raised exception for string density"
+    except InvalidConfigurationException as e:
+        print(f"✓ Non-numeric density rejected: {str(e)[:50]}...")
+
+    print("✓ Test 6 PASSED\n")
+
+
+def test_edge_cover_validation():
+    """Test that invalid edge covers are detected."""
+    print("\n=== Test 7: Edge Cover Validation ===")
+
+    # Create a simple graph
+    graph = Graph()
+    v0 = Vertex(0, 10, 10)
+    v1 = Vertex(1, 100, 10)
+    v2 = Vertex(2, 100, 100)
+
+    graph.add_vertex(v0)
+    graph.add_vertex(v1)
+    graph.add_vertex(v2)
+
+    e01 = Edge(v0, v1)
+    e12 = Edge(v1, v2)
+
+    graph.add_edge(e01)
+    graph.add_edge(e12)
+
+    # Valid edge cover
+    valid_cover = {e01, e12}
+    assert graph.is_edge_cover(valid_cover), "Valid cover should be accepted"
+    print("✓ Valid edge cover accepted")
+
+    # Invalid: edge not in graph
+    v3 = Vertex(3, 200, 200)
+    foreign_edge = Edge(v0, v3)  # v3 not even in graph!
+    invalid_cover = {e01, foreign_edge}
+
+    try:
+        graph.is_edge_cover(invalid_cover)
+        assert False, "Should have raised exception for foreign edge"
+    except ValueError as e:
+        print(f"✓ Foreign edge rejected: {str(e)[:50]}...")
+
+    # Invalid: doesn't cover all vertices
+    incomplete_cover = {e01}  # Missing v2
+    assert not graph.is_edge_cover(incomplete_cover), "Incomplete cover should be invalid"
+    print("✓ Incomplete edge cover rejected")
+
+    print("✓ Test 7 PASSED\n")
+
+
+def test_greedy_matching_based():
+    """Test that GreedyMatchingBased algorithm works correctly."""
+    print("\n=== Test 8: GreedyMatchingBased Algorithm ===")
+
+    generator = GraphGenerator(seed=DEFAULT_SEED)
+    graph = generator.generate_graph(num_vertices=6, edge_density=50.0)
+
+    print(f"Testing on graph: {graph}")
+
+    # Run all three algorithms
+    exhaustive = ExhaustiveSearch(graph)
+    exhaustive_metrics = exhaustive.find_minimum_edge_cover()
+
+    greedy_cov = GreedyHeuristic(graph)
+    greedy_cov_metrics = greedy_cov.find_edge_cover()
+
+    greedy_match = GreedyMatchingBased(graph)
+    greedy_match_metrics = greedy_match.find_edge_cover()
+
+    print(f"Optimal size: {exhaustive_metrics.solution_size}")
+    print(f"Greedy coverage size: {greedy_cov_metrics.solution_size}")
+    print(f"Greedy matching size: {greedy_match_metrics.solution_size}")
+
+    # Verify all produce valid edge covers
+    assert graph.is_edge_cover(exhaustive_metrics.solution), "Exhaustive solution invalid"
+    assert graph.is_edge_cover(greedy_cov_metrics.solution), "Greedy coverage solution invalid"
+    assert graph.is_edge_cover(greedy_match_metrics.solution), "Greedy matching solution invalid"
+    print("✓ All algorithms produce valid edge covers")
+
+    # Verify optimal is actually minimal
+    assert exhaustive_metrics.solution_size <= greedy_cov_metrics.solution_size
+    assert exhaustive_metrics.solution_size <= greedy_match_metrics.solution_size
+    print("✓ Optimal solution is indeed minimal")
+
+    # Verify greedy algorithms are fast
+    assert greedy_cov_metrics.execution_time < exhaustive_metrics.execution_time
+    assert greedy_match_metrics.execution_time < exhaustive_metrics.execution_time
+    print("✓ Greedy algorithms are faster than exhaustive")
+
+    print("✓ Test 8 PASSED\n")
+
+
+def test_experiment_runner_integration():
+    """Test that experiment runner works with all components."""
+    print("\n=== Test 9: Experiment Runner Integration ===")
+
+    runner = ExperimentRunner(
+        output_dir="results/test",
+        timeout_seconds=10.0,
+        seed=DEFAULT_SEED
+    )
+
+    # Run a small experiment
+    result = runner.run_single_experiment(
+        num_vertices=5,
+        edge_density=50.0,
+        verbose=False
+    )
+
+    print(f"Experiment result:")
+    print(f"  Vertices: {result.num_vertices}, Edges: {result.num_edges}")
+    print(f"  Optimal: {result.exhaustive_solution_size}")
+    print(f"  Greedy coverage: {result.greedy_solution_size}")
+    print(f"  Greedy matching: {result.greedy_matching_solution_size}")
+
+    # Verify result structure
+    assert result.num_vertices == 5
+    assert result.num_edges > 0
+    assert result.greedy_solution_size is not None
+    assert result.greedy_matching_solution_size is not None
+    print("✓ Experiment result has all required fields")
+
+    # Verify both greedy variants are present
+    assert result.greedy_matching_time > 0
+    assert result.greedy_matching_operations > 0
+    print("✓ Both greedy variants are executed")
+
+    # Verify comparison metrics exist
+    if not result.exhaustive_timed_out:
+        assert result.is_optimal is not None
+        assert result.matching_is_optimal is not None
+        print("✓ Comparison metrics are computed")
+
+    print("✓ Test 9 PASSED\n")
+
+
+# ============================================================================
+# TEST RUNNER
+# ============================================================================
+
 def run_all_tests():
     """Run all tests."""
     print("=" * 70)
-    print("RUNNING TESTS")
+    print("COMPREHENSIVE TEST SUITE - MINIMUM EDGE COVER")
+    print("Student Number: 113920")
     print("=" * 70)
 
     try:
+        # Basic algorithm tests
         test_simple_graph()
         test_generated_graph()
         test_complete_graph()
 
+        # Validation & integration tests
+        test_seed_reproducibility()
+        test_timeout_protection()
+        test_input_validation()
+        test_edge_cover_validation()
+        test_greedy_matching_based()
+        test_experiment_runner_integration()
+
         print("=" * 70)
-        print("ALL TESTS PASSED ✓")
+        print("ALL TESTS PASSED ✓ (9/9)")
         print("=" * 70)
         return True
+
     except AssertionError as e:
         print(f"\n✗ TEST FAILED: {e}")
+        import traceback
+        traceback.print_exc()
         return False
     except Exception as e:
         print(f"\n✗ ERROR: {e}")

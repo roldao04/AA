@@ -167,13 +167,26 @@ class Graph:
 
         Returns:
             True if edge_subset covers all vertices, False otherwise
+
+        Raises:
+            ValueError: If edge_subset contains edges not in this graph
         """
+        # First, validate that all edges in the subset belong to this graph
+        for edge in edge_subset:
+            if edge not in self.edges:
+                raise ValueError(
+                    f"Edge {edge} is not in the graph. "
+                    f"Edge cover must only contain edges from the graph."
+                )
+
+        # Count covered vertices
         covered_vertices = set()
 
         for edge in edge_subset:
             covered_vertices.add(edge.v1.id)
             covered_vertices.add(edge.v2.id)
 
+        # Check if all vertices are covered
         all_vertex_ids = {v.id for v in self.vertices}
         return covered_vertices == all_vertex_ids
 

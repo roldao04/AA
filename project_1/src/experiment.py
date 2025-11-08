@@ -5,7 +5,8 @@ Experimental framework for systematic testing of Edge Cover algorithms.
 import time
 import json
 import csv
-from typing import List, Dict, Optional, Any
+import multiprocessing
+from typing import List, Dict, Optional, Any, Callable
 from datetime import datetime
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -19,6 +20,70 @@ from src.algorithms import (
     AlgorithmMetrics,
     compare_solutions
 )
+from src.exceptions import AlgorithmTimeoutException
+from src.logger import setup_logger
+
+# Set up module logger
+logger = setup_logger(__name__)
+
+
+def _run_with_timeout(func: Callable, timeout: float, *args, **kwargs) -> Optional[Any]:
+    """
+    Run a function with a timeout using multiprocessing.
+
+    Args:
+        func: Function to run
+        timeout: Maximum execution time in seconds
+        *args: Positional arguments for func
+        **kwargs: Keyword arguments for func
+
+    Returns:
+        Result from func if completed within timeout, None otherwise
+
+    Raises:
+        AlgorithmTimeoutException: If function exceeds timeout
+    """
+    def worker(queue, func, args, kwargs):
+        """Worker function that runs in separate process."""
+        try:
+            result = func(*args, **kwargs)
+            queue.put(('success', result))
+        except Exception as e:
+            queue.put(('error', e))
+
+    # Create queue for inter-process communication
+    queue = multiprocessing.Queue()
+
+    # Create and start process
+    process = multiprocessing.Process(
+        target=worker,
+        args=(queue, func, args, kwargs)
+    )
+    process.start()
+
+    # Wait for process to complete or timeout
+    process.join(timeout=timeout)
+
+    # Check if process completed
+    if process.is_alive():
+        # Process is still running - kill it
+        process.terminate()
+        process.join(timeout=1.0)  # Give it 1 second to terminate gracefully
+        if process.is_alive():
+            process.kill()  # Force kill if still alive
+            process.join()
+        raise AlgorithmTimeoutException(f"Function exceeded timeout of {timeout} seconds")
+
+    # Process completed - get result
+    if not queue.empty():
+        status, result = queue.get()
+        if status == 'success':
+            return result
+        else:
+            raise result  # Re-raise the exception from worker
+    else:
+        # Process ended but no result (shouldn't happen)
+        raise RuntimeError("Process ended without result")
 
 
 @dataclass
@@ -36,17 +101,27 @@ class ExperimentResult:
     exhaustive_solution_size: Optional[int]
     exhaustive_timed_out: bool
 
-    # Greedy metrics
+    # Greedy coverage-based metrics
     greedy_time: float
     greedy_operations: int
     greedy_solution_size: int
 
-    # Comparison metrics
+    # Greedy matching-based metrics
+    greedy_matching_time: float
+    greedy_matching_operations: int
+    greedy_matching_solution_size: int
+
+    # Comparison metrics (greedy coverage vs optimal)
     is_optimal: Optional[bool]
     quality_ratio: Optional[float]
     size_difference: Optional[int]
     speedup: Optional[float]
     operation_reduction: Optional[float]
+
+    # Comparison metrics (greedy matching vs optimal)
+    matching_is_optimal: Optional[bool]
+    matching_quality_ratio: Optional[float]
+    matching_size_difference: Optional[int]
 
 
 class ExperimentRunner:
@@ -67,7 +142,7 @@ class ExperimentRunner:
             seed: Random seed for graph generation
         """
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.timeout_seconds = timeout_seconds
         self.generator = GraphGenerator(seed=seed)
         self.results: List[ExperimentResult] = []
@@ -97,38 +172,62 @@ class ExperimentRunner:
 
         timestamp = datetime.now().isoformat()
 
-        # Run exhaustive search with timeout
+        # Run exhaustive search with timeout enforcement
         exhaustive_metrics = None
         exhaustive_timed_out = False
 
-        if graph.num_edges() <= 20:  # Only run exhaustive for small graphs
+        # Only run exhaustive for small graphs (beyond 25 edges, it's impractical)
+        if graph.num_edges() <= 25:
             try:
-                exhaustive = ExhaustiveSearch(graph)
-                start_time = time.time()
-                exhaustive_metrics = exhaustive.find_minimum_edge_cover()
+                # Create a wrapper function for timeout enforcement
+                def run_exhaustive():
+                    exhaustive = ExhaustiveSearch(graph)
+                    return exhaustive.find_minimum_edge_cover()
 
-                # Check if it took too long
-                if exhaustive_metrics.execution_time > self.timeout_seconds:
-                    exhaustive_timed_out = True
-                    if verbose:
-                        print(f"[TIMEOUT: {exhaustive_metrics.execution_time:.2f}s]", end=" ")
+                # Run with actual timeout (kills process if exceeded)
+                exhaustive_metrics = _run_with_timeout(
+                    run_exhaustive,
+                    timeout=self.timeout_seconds
+                )
+
+                logger.info(f"Exhaustive search completed: V={num_vertices}, "
+                          f"E={graph.num_edges()}, time={exhaustive_metrics.execution_time:.4f}s")
+
+            except AlgorithmTimeoutException as e:
+                # Timeout occurred - process was killed
+                exhaustive_timed_out = True
+                logger.warning(f"Exhaustive search timed out: V={num_vertices}, "
+                             f"E={graph.num_edges()}, timeout={self.timeout_seconds}s")
+                if verbose:
+                    print(f"[TIMEOUT: >{self.timeout_seconds}s]", end=" ")
+
             except Exception as e:
+                # Other error occurred
+                exhaustive_timed_out = True
+                logger.error(f"Exhaustive search error: {e}")
                 if verbose:
                     print(f"[ERROR: {e}]", end=" ")
-                exhaustive_timed_out = True
         else:
+            # Too many edges - skip exhaustive search entirely
             exhaustive_timed_out = True
+            logger.info(f"Skipping exhaustive search: V={num_vertices}, "
+                       f"E={graph.num_edges()} (> 25 edges)")
             if verbose:
                 print("[SKIPPED: too many edges]", end=" ")
 
-        # Run greedy heuristic (always fast)
+        # Run both greedy heuristics (both are fast)
         greedy = GreedyHeuristic(graph)
         greedy_metrics = greedy.find_edge_cover()
 
-        # Compare if exhaustive completed
+        greedy_matching = GreedyMatchingBased(graph)
+        greedy_matching_metrics = greedy_matching.find_edge_cover()
+
+        # Compare both greedy algorithms against optimal (if available)
         comparison = None
+        matching_comparison = None
         if exhaustive_metrics and not exhaustive_timed_out:
             comparison = compare_solutions(exhaustive_metrics, greedy_metrics)
+            matching_comparison = compare_solutions(exhaustive_metrics, greedy_matching_metrics)
 
         # Create result
         result = ExperimentResult(
@@ -144,21 +243,29 @@ class ExperimentRunner:
             greedy_time=greedy_metrics.execution_time,
             greedy_operations=greedy_metrics.basic_operations,
             greedy_solution_size=greedy_metrics.solution_size,
+            greedy_matching_time=greedy_matching_metrics.execution_time,
+            greedy_matching_operations=greedy_matching_metrics.basic_operations,
+            greedy_matching_solution_size=greedy_matching_metrics.solution_size,
             is_optimal=comparison['is_optimal'] if comparison else None,
             quality_ratio=comparison['quality'] if comparison else None,
             size_difference=comparison['size_difference'] if comparison else None,
             speedup=comparison['speedup'] if comparison else None,
-            operation_reduction=comparison['operation_reduction'] if comparison else None
+            operation_reduction=comparison['operation_reduction'] if comparison else None,
+            matching_is_optimal=matching_comparison['is_optimal'] if matching_comparison else None,
+            matching_quality_ratio=matching_comparison['quality'] if matching_comparison else None,
+            matching_size_difference=matching_comparison['size_difference'] if matching_comparison else None
         )
 
         if verbose:
             if exhaustive_metrics and not exhaustive_timed_out:
                 print(f"Optimal={exhaustive_metrics.solution_size}, "
-                      f"Greedy={greedy_metrics.solution_size}, "
-                      f"Quality={comparison['quality']:.2f}, "
-                      f"Speedup={comparison['speedup']:.1f}x")
+                      f"GreedyCov={greedy_metrics.solution_size}, "
+                      f"GreedyMatch={greedy_matching_metrics.solution_size}, "
+                      f"QualityCov={comparison['quality']:.2f}, "
+                      f"QualityMatch={matching_comparison['quality']:.2f}")
             else:
-                print(f"Greedy={greedy_metrics.solution_size} "
+                print(f"GreedyCov={greedy_metrics.solution_size}, "
+                      f"GreedyMatch={greedy_matching_metrics.solution_size} "
                       f"(optimal unknown)")
 
         return result
@@ -203,8 +310,11 @@ class ExperimentRunner:
                     print(f"\nVertex count: {num_vertices}")
 
                 for density in edge_densities:
-                    # Reset seed for reproducibility within each experiment
-                    self.generator.reset_seed()
+                    # Note: We do NOT reset the seed here. The seed was set once at initialization
+                    # (using student number 113920), and we let the random state advance naturally.
+                    # This ensures each graph instance has different vertex positions while
+                    # maintaining reproducibility (same sequence of graphs on every run).
+                    # This aligns with PDF requirement: "generate graph instances" (plural).
 
                     result = self.run_single_experiment(num_vertices, density, verbose)
                     results.append(result)

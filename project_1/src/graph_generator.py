@@ -6,30 +6,39 @@ Uses student number 113920 as random seed for reproducibility.
 import random
 from typing import List, Set, Tuple
 from src.graph import Graph, Vertex, Edge
+from src.config import (
+    MIN_VERTICES, MAX_VERTICES, MIN_COORD, MAX_COORD,
+    MIN_DISTANCE, MAX_VERTEX_GENERATION_ATTEMPTS,
+    MIN_EDGE_DENSITY, MAX_EDGE_DENSITY, DEFAULT_SEED
+)
+from src.exceptions import InvalidConfigurationException, GraphGenerationException
+from src.logger import setup_logger
+
+# Set up module logger
+logger = setup_logger(__name__)
 
 
 class GraphGenerator:
     """Generates random graphs with specified properties."""
 
-    # Student number as seed for reproducibility
-    SEED = 113920
-
-    # Coordinate range for 2D vertices
-    MIN_COORD = 1
-    MAX_COORD = 500
-
-    # Minimum distance between vertices to avoid clustering
-    MIN_DISTANCE = 10.0
-
-    def __init__(self, seed: int = SEED):
+    def __init__(self, seed: int = DEFAULT_SEED):
         """
         Initialize the graph generator with a random seed.
 
         Args:
             seed: Random seed for reproducibility (default: 113920)
+
+        Raises:
+            InvalidConfigurationException: If seed is invalid
         """
+        if not isinstance(seed, int):
+            raise InvalidConfigurationException(
+                f"Seed must be an integer, got {type(seed).__name__}"
+            )
+
         self.seed = seed
         random.seed(seed)
+        logger.info(f"GraphGenerator initialized with seed={seed}")
 
     def generate_vertices(self, num_vertices: int) -> List[Vertex]:
         """
@@ -41,20 +50,36 @@ class GraphGenerator:
 
         Returns:
             List of Vertex objects
+
+        Raises:
+            InvalidConfigurationException: If num_vertices is invalid
         """
+        if not isinstance(num_vertices, int):
+            raise InvalidConfigurationException(
+                f"num_vertices must be an integer, got {type(num_vertices).__name__}"
+            )
+        if num_vertices < MIN_VERTICES:
+            raise InvalidConfigurationException(
+                f"num_vertices must be >= {MIN_VERTICES}, got {num_vertices}"
+            )
+        if num_vertices > MAX_VERTICES:
+            raise InvalidConfigurationException(
+                f"num_vertices must be <= {MAX_VERTICES}, got {num_vertices}"
+            )
+
         vertices = []
         attempts = 0
-        max_attempts = num_vertices * 1000  # Prevent infinite loops
+        max_attempts = MAX_VERTEX_GENERATION_ATTEMPTS
 
         while len(vertices) < num_vertices and attempts < max_attempts:
-            x = random.randint(self.MIN_COORD, self.MAX_COORD)
-            y = random.randint(self.MIN_COORD, self.MAX_COORD)
+            x = random.randint(MIN_COORD, MAX_COORD)
+            y = random.randint(MIN_COORD, MAX_COORD)
             new_vertex = Vertex(len(vertices), x, y)
 
             # Check if new vertex is far enough from existing vertices
             too_close = False
             for existing_vertex in vertices:
-                if new_vertex.distance_to(existing_vertex) < self.MIN_DISTANCE:
+                if new_vertex.distance_to(existing_vertex) < MIN_DISTANCE:
                     too_close = True
                     break
 
@@ -65,9 +90,14 @@ class GraphGenerator:
 
         if len(vertices) < num_vertices:
             # If we couldn't generate enough spaced vertices, relax the constraint
+            logger.warning(
+                f"Could not generate {num_vertices} vertices with MIN_DISTANCE={MIN_DISTANCE} "
+                f"constraint after {max_attempts} attempts. Generated {len(vertices)} spaced vertices. "
+                f"Relaxing distance constraint for remaining {num_vertices - len(vertices)} vertices."
+            )
             while len(vertices) < num_vertices:
-                x = random.randint(self.MIN_COORD, self.MAX_COORD)
-                y = random.randint(self.MIN_COORD, self.MAX_COORD)
+                x = random.randint(MIN_COORD, MAX_COORD)
+                y = random.randint(MIN_COORD, MAX_COORD)
                 vertices.append(Vertex(len(vertices), x, y))
 
         return vertices
@@ -151,12 +181,25 @@ class GraphGenerator:
 
         Returns:
             Generated Graph object
-        """
-        if num_vertices < 2:
-            raise ValueError("Graph must have at least 2 vertices")
 
-        if not (0 <= edge_density <= 100):
-            raise ValueError("Edge density must be between 0 and 100")
+        Raises:
+            InvalidConfigurationException: If parameters are invalid
+            GraphGenerationException: If graph generation fails
+        """
+        # Validate edge density
+        if not isinstance(edge_density, (int, float)):
+            raise InvalidConfigurationException(
+                f"edge_density must be numeric, got {type(edge_density).__name__}"
+            )
+        if not (MIN_EDGE_DENSITY <= edge_density <= MAX_EDGE_DENSITY):
+            raise InvalidConfigurationException(
+                f"edge_density must be between {MIN_EDGE_DENSITY} and {MAX_EDGE_DENSITY}, "
+                f"got {edge_density}"
+            )
+
+        # Note: num_vertices validation happens in generate_vertices()
+
+        logger.info(f"Generating graph: V={num_vertices}, density={edge_density}%")
 
         # Generate vertices
         vertices = self.generate_vertices(num_vertices)
@@ -167,7 +210,12 @@ class GraphGenerator:
 
         # Ensure at least one edge per vertex (minimum for edge cover)
         min_edges = (num_vertices + 1) // 2  # Minimum edges for edge cover
-        target_edge_count = max(target_edge_count, min_edges)
+        if target_edge_count < min_edges:
+            logger.debug(
+                f"Increasing edge count from {target_edge_count} to {min_edges} "
+                f"to ensure no isolated vertices"
+            )
+            target_edge_count = min_edges
 
         # Generate edges
         edges = self.generate_edges(vertices, target_edge_count)

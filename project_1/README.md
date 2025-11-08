@@ -11,17 +11,20 @@ Find a minimum edge cover for a given undirected graph G(V, E), with n vertices 
 
 ## Project Overview
 
-This project implements and analyzes two algorithms for solving the Minimum Edge Cover problem:
+This project implements and analyzes three algorithms for solving the Minimum Edge Cover problem:
 
 1. **Exhaustive Search** - Optimal algorithm using backtracking with branch pruning
-2. **Greedy Heuristic** - Fast approximation algorithm
+2. **Greedy Coverage** - Fast heuristic selecting edges that cover most uncovered vertices
+3. **Greedy Matching** - Fast heuristic based on maximal matching
 
 The implementation includes:
 - Random graph generation with reproducible seed (113920)
 - Comprehensive metrics tracking (execution time, operations, solutions explored)
-- Automated experimental framework
+- Automated experimental framework with timeout enforcement
+- Input validation and error handling
+- Structured logging system
 - Statistical analysis and visualization
-- Complete test suite
+- Complete test suite (9 comprehensive tests)
 
 ## Project Structure
 
@@ -29,19 +32,24 @@ The implementation includes:
 project_1/
 ├── src/
 │   ├── __init__.py
+│   ├── config.py             # Configuration constants and settings
+│   ├── exceptions.py         # Custom exception classes
+│   ├── logger.py             # Logging utilities
 │   ├── graph.py              # Graph data structures (Vertex, Edge, Graph)
 │   ├── graph_generator.py    # Random graph generator with seed 113920
-│   ├── algorithms.py         # Exhaustive search and greedy heuristic
-│   ├── experiment.py         # Experimental framework
+│   ├── algorithms.py         # 3 algorithms: Exhaustive + 2 Greedy variants
+│   ├── experiment.py         # Experimental framework with timeout
 │   └── visualization.py      # Plotting and visualization tools
 ├── tests/
 │   ├── __init__.py
-│   └── test_basic.py         # Unit tests
+│   └── test_basic.py         # Comprehensive test suite (9 tests)
 ├── results/                  # Generated results (CSV, JSON, plots)
 ├── run_experiments.py        # Main experiment runner
+├── run_full_experiments.py   # Extended experiments for report
 ├── requirements.txt          # Python dependencies
-├── INCEPTION.md             # Detailed project guide
-└── README.md                # This file
+├── INCEPTION.md              # Detailed project guide
+├── PROJECT_SUMMARY.md        # Implementation checklist
+└── README.md                 # This file
 ```
 
 ## Installation
@@ -119,7 +127,7 @@ Expected output: All tests should pass with optimal solutions verified.
 
 **Guarantees:** Always finds the optimal (minimum) edge cover
 
-### Greedy Heuristic (Fast)
+### Greedy Coverage (Fast)
 
 **Approach:** Iteratively select edges that cover the most uncovered vertices
 
@@ -133,6 +141,18 @@ Expected output: All tests should pass with optimal solutions verified.
 **Complexity:** O(m × n) where m = edges, n = vertices
 
 **Guarantees:** Fast execution, but may not find optimal solution
+
+### Greedy Matching (Fast)
+
+**Approach:** Based on maximal matching theory
+
+**Strategy:**
+1. Find a maximal matching (greedily select edges with no common vertices)
+2. For each unmatched vertex, add any incident edge
+
+**Complexity:** O(m) for greedy maximal matching
+
+**Guarantees:** Fast execution, theoretically related to optimal via matching theory
 
 ## Graph Generation
 
@@ -190,14 +210,22 @@ From the initial quick experiment:
 
 ## Testing
 
-The test suite validates:
+The comprehensive test suite (9 tests) validates:
+
+**Basic Algorithm Tests:**
 - Simple graphs with known optimal solutions (square graph)
 - Randomly generated graphs at various densities
 - Complete graphs (K4)
-- Edge cover validity
-- Solution optimality
 
-All tests include assertions to verify correctness.
+**Validation & Integration Tests:**
+- Seed reproducibility and graph variation
+- Timeout protection for large graphs
+- Input validation (invalid parameters rejected)
+- Edge cover validation (foreign edges detected)
+- GreedyMatchingBased algorithm correctness
+- Full integration with experiment runner
+
+All tests include assertions to verify correctness. Run with: `python3 tests/test_basic.py`
 
 ## Theoretical Analysis
 
