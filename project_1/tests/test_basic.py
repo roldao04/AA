@@ -20,7 +20,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.graph import Graph, Vertex, Edge
 from src.graph_generator import GraphGenerator
-from src.algorithms import ExhaustiveSearch, GreedyHeuristic, GreedyMatchingBased
+from src.algorithms import (
+    ExhaustiveSearch,
+    GreedyHeuristic,
+    GreedyMatchingBased,
+    OptimalMatchingBased,
+    BranchAndBound
+)
 from src.experiment import ExperimentRunner
 from src.exceptions import (
     InvalidConfigurationException,
@@ -435,6 +441,199 @@ def test_experiment_runner_integration():
     print("✓ Test 9 PASSED\n")
 
 
+def test_optimal_matching_algorithm():
+    """Test the polynomial-time optimal matching-based algorithm."""
+    print("\n=== Test 10: Optimal Matching Algorithm ===")
+
+    # Create simple test graph
+    graph = Graph()
+    v0 = Vertex(0, 10, 10)
+    v1 = Vertex(1, 100, 10)
+    v2 = Vertex(2, 100, 100)
+    v3 = Vertex(3, 10, 100)
+
+    graph.add_vertex(v0)
+    graph.add_vertex(v1)
+    graph.add_vertex(v2)
+    graph.add_vertex(v3)
+
+    # Add edges forming a square
+    e01 = Edge(v0, v1)
+    e12 = Edge(v1, v2)
+    e23 = Edge(v2, v3)
+    e30 = Edge(v3, v0)
+
+    graph.add_edge(e01)
+    graph.add_edge(e12)
+    graph.add_edge(e23)
+    graph.add_edge(e30)
+
+    try:
+        # Run optimal matching algorithm
+        optimal_matching = OptimalMatchingBased(graph)
+        result = optimal_matching.find_minimum_edge_cover()
+
+        print(f"Solution size: {result.solution_size}")
+        print(f"Execution time: {result.execution_time:.6f}s")
+        print(f"Operations: {result.basic_operations}")
+
+        # Verify solution is valid edge cover
+        assert graph.is_edge_cover(result.solution), "Solution must be valid edge cover"
+        print("✓ Solution is a valid edge cover")
+
+        # For this graph, optimal is 2 (any two opposite edges)
+        assert result.solution_size == 2, f"Expected size 2, got {result.solution_size}"
+        print("✓ Solution is optimal (size = 2)")
+
+        # Verify optimality flag
+        assert result.is_optimal == True, "Algorithm should guarantee optimality"
+        print("✓ Optimality guarantee is correct")
+
+        # Test on a larger random graph
+        generator = GraphGenerator(seed=DEFAULT_SEED)
+        large_graph = generator.generate_graph(20, 50.0)
+
+        optimal_matching_large = OptimalMatchingBased(large_graph)
+        large_result = optimal_matching_large.find_minimum_edge_cover()
+
+        assert large_graph.is_edge_cover(large_result.solution), "Large graph solution must be valid"
+        print(f"✓ Works on larger graph (V={20}, E={large_graph.num_edges()})")
+
+    except ImportError as e:
+        print(f"⚠ NetworkX not installed - skipping test: {e}")
+        print("  Install with: pip install networkx")
+        print("✓ Test 10 SKIPPED (NetworkX required)\n")
+        return
+
+    print("✓ Test 10 PASSED\n")
+
+
+def test_branch_and_bound_algorithm():
+    """Test the Branch and Bound enhancement to exhaustive search."""
+    print("\n=== Test 11: Branch and Bound Algorithm ===")
+
+    # Create test graph
+    generator = GraphGenerator(seed=DEFAULT_SEED)
+    graph = generator.generate_graph(6, 50.0)
+
+    # Run Branch and Bound
+    bb = BranchAndBound(graph)
+    bb_result = bb.find_minimum_edge_cover()
+
+    print(f"Solution size: {bb_result.solution_size}")
+    print(f"Execution time: {bb_result.execution_time:.6f}s")
+    print(f"Operations: {bb_result.basic_operations}")
+    print(f"Solutions explored: {bb_result.solutions_explored}")
+
+    # Verify solution is valid edge cover
+    assert graph.is_edge_cover(bb_result.solution), "B&B solution must be valid edge cover"
+    print("✓ Solution is a valid edge cover")
+
+    # Verify optimality flag
+    assert bb_result.is_optimal == True, "B&B should guarantee optimality"
+    print("✓ Optimality guarantee is correct")
+
+    # Compare with exhaustive search - should give same answer
+    exhaustive = ExhaustiveSearch(graph)
+    exhaustive_result = exhaustive.find_minimum_edge_cover()
+
+    assert bb_result.solution_size == exhaustive_result.solution_size, \
+        f"B&B and Exhaustive should find same optimal size (B&B={bb_result.solution_size}, Exhaustive={exhaustive_result.solution_size})"
+    print("✓ B&B finds same optimal size as exhaustive search")
+
+    # B&B should explore fewer or equal solutions (due to pruning)
+    assert bb_result.solutions_explored <= exhaustive_result.solutions_explored, \
+        "B&B should explore fewer or equal solutions due to pruning"
+    print(f"✓ B&B pruning effective: {bb_result.solutions_explored} vs {exhaustive_result.solutions_explored} solutions")
+
+    print("✓ Test 11 PASSED\n")
+
+
+def test_optimality_comparison():
+    """Test that all optimal algorithms agree on the same optimal size."""
+    print("\n=== Test 12: Optimality Comparison ===")
+
+    # Create test graph
+    generator = GraphGenerator(seed=DEFAULT_SEED + 42)
+    graph = generator.generate_graph(7, 40.0)
+
+    # Run all three optimal algorithms
+    exhaustive = ExhaustiveSearch(graph)
+    exhaustive_result = exhaustive.find_minimum_edge_cover()
+    print(f"Exhaustive: size={exhaustive_result.solution_size}, time={exhaustive_result.execution_time:.4f}s")
+
+    bb = BranchAndBound(graph)
+    bb_result = bb.find_minimum_edge_cover()
+    print(f"Branch & Bound: size={bb_result.solution_size}, time={bb_result.execution_time:.4f}s")
+
+    try:
+        optimal_matching = OptimalMatchingBased(graph)
+        optimal_result = optimal_matching.find_minimum_edge_cover()
+        print(f"Optimal Matching: size={optimal_result.solution_size}, time={optimal_result.execution_time:.4f}s")
+
+        # All three should find the same optimal size
+        assert exhaustive_result.solution_size == bb_result.solution_size == optimal_result.solution_size, \
+            f"All optimal algorithms should agree (Exhaustive={exhaustive_result.solution_size}, B&B={bb_result.solution_size}, OptMatch={optimal_result.solution_size})"
+        print("✓ All three optimal algorithms agree on optimal size")
+
+        # Optimal matching should be fastest (polynomial vs exponential)
+        if graph.num_edges() > 10:
+            assert optimal_result.execution_time < exhaustive_result.execution_time, \
+                "Optimal matching should be faster than exhaustive for non-trivial graphs"
+            print("✓ Polynomial algorithm is faster than exponential")
+
+    except ImportError:
+        print("⚠ NetworkX not installed - comparing only Exhaustive and B&B")
+        assert exhaustive_result.solution_size == bb_result.solution_size, \
+            "Exhaustive and B&B should agree on optimal size"
+        print("✓ Exhaustive and B&B agree on optimal size")
+
+    print("✓ Test 12 PASSED\n")
+
+
+def test_large_graph_polynomial():
+    """Test that polynomial algorithm can handle large graphs that exhaust cannot."""
+    print("\n=== Test 13: Large Graph with Polynomial Algorithm ===")
+
+    try:
+        # Create a graph too large for exhaustive search (but easy for polynomial)
+        generator = GraphGenerator(seed=DEFAULT_SEED)
+        large_graph = generator.generate_graph(50, 25.0)  # 50 vertices, 25% density
+
+        print(f"Large graph: V={large_graph.num_vertices()}, E={large_graph.num_edges()}")
+
+        # This should complete quickly with optimal matching
+        optimal_matching = OptimalMatchingBased(large_graph)
+        start_time = time.time()
+        result = optimal_matching.find_minimum_edge_cover()
+        elapsed = time.time() - start_time
+
+        print(f"Solution size: {result.solution_size}")
+        print(f"Execution time: {elapsed:.4f}s")
+        print(f"Operations: {result.basic_operations}")
+
+        # Verify solution is valid
+        assert large_graph.is_edge_cover(result.solution), "Large graph solution must be valid edge cover"
+        print("✓ Solution is a valid edge cover")
+
+        # Should complete in reasonable time (< 5 seconds for polynomial)
+        assert elapsed < 5.0, f"Polynomial algorithm should complete quickly (took {elapsed:.2f}s)"
+        print("✓ Completes in polynomial time")
+
+        # Solution size should be reasonable (between n/2 and n-1)
+        n = large_graph.num_vertices()
+        assert n//2 <= result.solution_size <= n-1, \
+            f"Solution size {result.solution_size} should be between {n//2} and {n-1}"
+        print("✓ Solution size is reasonable")
+
+        print("✓ Test 13 PASSED\n")
+
+    except ImportError as e:
+        print(f"⚠ NetworkX not installed - skipping test: {e}")
+        print("  This test demonstrates the advantage of polynomial-time algorithms")
+        print("✓ Test 13 SKIPPED (NetworkX required)\n")
+
+
 # ============================================================================
 # TEST RUNNER
 # ============================================================================
@@ -460,8 +659,14 @@ def run_all_tests():
         test_greedy_matching_based()
         test_experiment_runner_integration()
 
+        # New algorithm tests (Phase 2)
+        test_optimal_matching_algorithm()
+        test_branch_and_bound_algorithm()
+        test_optimality_comparison()
+        test_large_graph_polynomial()
+
         print("=" * 70)
-        print("ALL TESTS PASSED ✓ (9/9)")
+        print("ALL TESTS PASSED ✓ (13/13)")
         print("=" * 70)
         return True
 

@@ -280,6 +280,209 @@ class ResultVisualizer:
         print(f"Plot saved: {output_path}")
         return output_path
 
+    def plot_complexity_validation(
+        self,
+        algorithm_name: str,
+        size_key: str,
+        time_key: str,
+        complexity_fit,
+        filename: str = None
+    ) -> Path:
+        """
+        Plot experimental data vs theoretical complexity curve.
+
+        Args:
+            algorithm_name: Name of algorithm
+            size_key: Key for problem size ('num_edges' or 'num_vertices')
+            time_key: Key for execution time
+            complexity_fit: ComplexityFit object from complexity_analysis module
+            filename: Output filename (default: complexity_{algorithm}.png)
+
+        Returns:
+            Path to saved plot
+        """
+        if filename is None:
+            safe_name = algorithm_name.lower().replace(' ', '_').replace('&', 'and')
+            filename = f"complexity_{safe_name}.png"
+
+        # Extract experimental data
+        sizes = []
+        times = []
+        for result in self.results:
+            size = getattr(result, size_key, None)
+            time_val = getattr(result, time_key, None)
+            if size is not None and time_val is not None and time_val > 0:
+                sizes.append(size)
+                times.append(time_val)
+
+        if not sizes:
+            print(f"No data available for {algorithm_name}")
+            return None
+
+        # Sort by size
+        sorted_data = sorted(zip(sizes, times))
+        sizes, times = zip(*sorted_data)
+
+        # Create plot
+        plt.figure(figsize=(10, 6))
+
+        # Plot experimental data
+        plt.scatter(sizes, times, alpha=0.6, s=50, label='Experimental', color='blue')
+
+        # Plot theoretical curve if available
+        if complexity_fit:
+            theo_sizes = [p[0] for p in complexity_fit.predictions]
+            theo_times = [p[1] for p in complexity_fit.predictions]
+            sorted_theo = sorted(zip(theo_sizes, theo_times))
+            theo_sizes, theo_times = zip(*sorted_theo)
+
+            plt.plot(theo_sizes, theo_times, 'r--', linewidth=2,
+                    label=f'Theoretical {complexity_fit.complexity_class}', alpha=0.7)
+
+            # Add R² to plot
+            plt.text(0.05, 0.95, f'R² = {complexity_fit.r_squared:.4f}',
+                    transform=plt.gca().transAxes,
+                    verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+        plt.xlabel(f'{size_key.replace("_", " ").title()}', fontsize=12)
+        plt.ylabel('Execution Time (seconds)', fontsize=12)
+        plt.title(f'Complexity Validation: {algorithm_name}', fontsize=14, fontweight='bold')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+
+        # Save plot
+        output_path = self.output_dir / filename
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+        print(f"Plot saved: {output_path}")
+        return output_path
+
+    def plot_all_algorithms_comparison(self, filename: str = "all_algorithms_comparison.png") -> Path:
+        """
+        Plot all 5 algorithms on single comparison chart (log scale).
+
+        Args:
+            filename: Output filename
+
+        Returns:
+            Path to saved plot
+        """
+        plt.figure(figsize=(12, 7))
+
+        # Define algorithm configurations
+        algorithms = [
+            ('exhaustive_time', 'exhaustive_timed_out', 'Exhaustive Search', 'red', 'o'),
+            ('branch_bound_time', 'branch_bound_timed_out', 'Branch & Bound', 'orange', 's'),
+            ('optimal_matching_time', 'optimal_matching_failed', 'Optimal Matching (O(n^2.5))', 'green', '^'),
+            ('greedy_time', None, 'Greedy Coverage', 'blue', 'D'),
+            ('greedy_matching_time', None, 'Greedy Matching (O(m))', 'purple', 'v'),
+        ]
+
+        for time_key, failed_key, label, color, marker in algorithms:
+            sizes = []
+            times = []
+
+            for result in self.results:
+                # Check if algorithm failed/timed out
+                if failed_key and getattr(result, failed_key, False):
+                    continue
+
+                time_val = getattr(result, time_key, None)
+                if time_val is not None and time_val > 0:
+                    # Use num_edges as x-axis for comparison
+                    sizes.append(result.num_edges)
+                    times.append(time_val)
+
+            if sizes:
+                # Sort by size
+                sorted_data = sorted(zip(sizes, times))
+                sizes, times = zip(*sorted_data)
+                plt.plot(sizes, times, marker=marker, label=label, color=color,
+                        linewidth=2, markersize=6, alpha=0.7)
+
+        plt.xlabel('Number of Edges', fontsize=12)
+        plt.ylabel('Execution Time (seconds, log scale)', fontsize=12)
+        plt.title('Algorithm Comparison: All 5 Algorithms', fontsize=14, fontweight='bold')
+        plt.yscale('log')
+        plt.legend(loc='best', fontsize=10)
+        plt.grid(True, alpha=0.3, which='both')
+        plt.tight_layout()
+
+        # Save plot
+        output_path = self.output_dir / filename
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+        print(f"Plot saved: {output_path}")
+        return output_path
+
+    def plot_performance_projection(
+        self,
+        complexity_fits: Dict,
+        target_sizes: List[int] = None,
+        filename: str = "performance_projection.png"
+    ) -> Path:
+        """
+        Plot performance extrapolation to larger problem sizes.
+
+        Args:
+            complexity_fits: Dictionary of ComplexityFit objects by algorithm name
+            target_sizes: List of sizes to project to (default: [10, 20, 30, 40, 50])
+            filename: Output filename
+
+        Returns:
+            Path to saved plot
+        """
+        if target_sizes is None:
+            target_sizes = list(range(10, 51, 5))
+
+        plt.figure(figsize=(12, 8))
+
+        colors = {
+            'Exhaustive Search': 'red',
+            'Branch & Bound': 'orange',
+            'Optimal Matching': 'green',
+            'Greedy Coverage': 'blue',
+            'Greedy Matching': 'purple'
+        }
+
+        for algo_name, fit in complexity_fits.items():
+            if fit is None:
+                continue
+
+            # Extrapolate
+            from src.complexity_analysis import extrapolate_performance
+            projections = extrapolate_performance(fit, target_sizes)
+
+            sizes = [p[0] for p in projections]
+            times = [p[1] for p in projections]
+
+            color = colors.get(algo_name, 'gray')
+            plt.plot(sizes, times, label=f'{algo_name} {fit.complexity_class}',
+                    color=color, linewidth=2, alpha=0.7)
+
+        # Add horizontal line for "reasonable time" (e.g., 1 hour)
+        plt.axhline(y=3600, color='black', linestyle='--', linewidth=1, alpha=0.5, label='1 hour')
+
+        plt.xlabel('Problem Size (edges)', fontsize=12)
+        plt.ylabel('Projected Execution Time (seconds, log scale)', fontsize=12)
+        plt.title('Performance Projection: Scalability to Larger Graphs', fontsize=14, fontweight='bold')
+        plt.yscale('log')
+        plt.legend(loc='best', fontsize=9)
+        plt.grid(True, alpha=0.3, which='both')
+        plt.tight_layout()
+
+        # Save plot
+        output_path = self.output_dir / filename
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+        print(f"Plot saved: {output_path}")
+        return output_path
+
     def generate_all_plots(self) -> List[Path]:
         """
         Generate all available plots.
@@ -320,6 +523,11 @@ class ResultVisualizer:
             plots.append(self.plot_solution_size_comparison())
         except Exception as e:
             print(f"Error generating solution size plot: {e}")
+
+        try:
+            plots.append(self.plot_all_algorithms_comparison())
+        except Exception as e:
+            print(f"Error generating all algorithms comparison plot: {e}")
 
         print(f"\n=== Generated {len(plots)} plots ===\n")
         return plots

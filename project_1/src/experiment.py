@@ -17,6 +17,8 @@ from src.algorithms import (
     ExhaustiveSearch,
     GreedyHeuristic,
     GreedyMatchingBased,
+    OptimalMatchingBased,
+    BranchAndBound,
     AlgorithmMetrics,
     compare_solutions
 )
@@ -111,6 +113,19 @@ class ExperimentResult:
     greedy_matching_operations: int
     greedy_matching_solution_size: int
 
+    # Optimal matching-based metrics (polynomial-time optimal)
+    optimal_matching_time: Optional[float]
+    optimal_matching_operations: Optional[int]
+    optimal_matching_solution_size: Optional[int]
+    optimal_matching_failed: bool
+
+    # Branch and Bound metrics (enhanced exhaustive)
+    branch_bound_time: Optional[float]
+    branch_bound_operations: Optional[int]
+    branch_bound_solutions_explored: Optional[int]
+    branch_bound_solution_size: Optional[int]
+    branch_bound_timed_out: bool
+
     # Comparison metrics (greedy coverage vs optimal)
     is_optimal: Optional[bool]
     quality_ratio: Optional[float]
@@ -122,6 +137,10 @@ class ExperimentResult:
     matching_is_optimal: Optional[bool]
     matching_quality_ratio: Optional[float]
     matching_size_difference: Optional[int]
+
+    # Comparison metrics (Branch & Bound vs Exhaustive)
+    bb_vs_exhaustive_speedup: Optional[float]
+    bb_vs_exhaustive_operation_reduction: Optional[float]
 
 
 class ExperimentRunner:
@@ -222,12 +241,78 @@ class ExperimentRunner:
         greedy_matching = GreedyMatchingBased(graph)
         greedy_matching_metrics = greedy_matching.find_edge_cover()
 
-        # Compare both greedy algorithms against optimal (if available)
+        # Run optimal matching-based algorithm (polynomial time - always run)
+        optimal_matching_metrics = None
+        optimal_matching_failed = False
+        try:
+            optimal_matching = OptimalMatchingBased(graph)
+            optimal_matching_metrics = optimal_matching.find_minimum_edge_cover()
+            logger.info(f"Optimal matching completed: V={num_vertices}, "
+                       f"E={graph.num_edges()}, time={optimal_matching_metrics.execution_time:.4f}s, "
+                       f"size={optimal_matching_metrics.solution_size}")
+        except Exception as e:
+            optimal_matching_failed = True
+            logger.error(f"Optimal matching error: {e}")
+            if verbose:
+                print(f"[OPT_ERROR: {e}]", end=" ")
+
+        # Run Branch and Bound (for small graphs, similar conditions as exhaustive)
+        branch_bound_metrics = None
+        branch_bound_timed_out = False
+        if graph.num_edges() <= 25:
+            try:
+                def run_branch_bound():
+                    bb = BranchAndBound(graph)
+                    return bb.find_minimum_edge_cover()
+
+                branch_bound_metrics = _run_with_timeout(
+                    run_branch_bound,
+                    timeout=self.timeout_seconds
+                )
+
+                logger.info(f"Branch & Bound completed: V={num_vertices}, "
+                          f"E={graph.num_edges()}, time={branch_bound_metrics.execution_time:.4f}s")
+
+            except AlgorithmTimeoutException as e:
+                branch_bound_timed_out = True
+                logger.warning(f"Branch & Bound timed out: V={num_vertices}, "
+                             f"E={graph.num_edges()}, timeout={self.timeout_seconds}s")
+                if verbose:
+                    print(f"[BB_TIMEOUT]", end=" ")
+
+            except Exception as e:
+                branch_bound_timed_out = True
+                logger.error(f"Branch & Bound error: {e}")
+                if verbose:
+                    print(f"[BB_ERROR: {e}]", end=" ")
+        else:
+            branch_bound_timed_out = True
+            logger.info(f"Skipping Branch & Bound: V={num_vertices}, "
+                       f"E={graph.num_edges()} (> 25 edges)")
+
+        # Determine best optimal reference (prefer optimal matching, fallback to exhaustive)
+        optimal_reference = None
+        if optimal_matching_metrics and not optimal_matching_failed:
+            optimal_reference = optimal_matching_metrics
+        elif exhaustive_metrics and not exhaustive_timed_out:
+            optimal_reference = exhaustive_metrics
+
+        # Compare all algorithms against optimal reference (if available)
         comparison = None
         matching_comparison = None
-        if exhaustive_metrics and not exhaustive_timed_out:
-            comparison = compare_solutions(exhaustive_metrics, greedy_metrics)
-            matching_comparison = compare_solutions(exhaustive_metrics, greedy_matching_metrics)
+        bb_comparison = None
+        if optimal_reference:
+            comparison = compare_solutions(optimal_reference, greedy_metrics)
+            matching_comparison = compare_solutions(optimal_reference, greedy_matching_metrics)
+
+        # Compare Branch & Bound vs Exhaustive (both should give same answer)
+        bb_vs_exhaustive_speedup = None
+        bb_vs_exhaustive_operation_reduction = None
+        if exhaustive_metrics and not exhaustive_timed_out and branch_bound_metrics and not branch_bound_timed_out:
+            if exhaustive_metrics.execution_time > 0:
+                bb_vs_exhaustive_speedup = exhaustive_metrics.execution_time / branch_bound_metrics.execution_time
+            if exhaustive_metrics.basic_operations > 0:
+                bb_vs_exhaustive_operation_reduction = 1.0 - (branch_bound_metrics.basic_operations / exhaustive_metrics.basic_operations)
 
         # Create result
         result = ExperimentResult(
@@ -246,6 +331,15 @@ class ExperimentRunner:
             greedy_matching_time=greedy_matching_metrics.execution_time,
             greedy_matching_operations=greedy_matching_metrics.basic_operations,
             greedy_matching_solution_size=greedy_matching_metrics.solution_size,
+            optimal_matching_time=optimal_matching_metrics.execution_time if optimal_matching_metrics else None,
+            optimal_matching_operations=optimal_matching_metrics.basic_operations if optimal_matching_metrics else None,
+            optimal_matching_solution_size=optimal_matching_metrics.solution_size if optimal_matching_metrics else None,
+            optimal_matching_failed=optimal_matching_failed,
+            branch_bound_time=branch_bound_metrics.execution_time if branch_bound_metrics else None,
+            branch_bound_operations=branch_bound_metrics.basic_operations if branch_bound_metrics else None,
+            branch_bound_solutions_explored=branch_bound_metrics.solutions_explored if branch_bound_metrics else None,
+            branch_bound_solution_size=branch_bound_metrics.solution_size if branch_bound_metrics else None,
+            branch_bound_timed_out=branch_bound_timed_out,
             is_optimal=comparison['is_optimal'] if comparison else None,
             quality_ratio=comparison['quality'] if comparison else None,
             size_difference=comparison['size_difference'] if comparison else None,
@@ -253,20 +347,39 @@ class ExperimentRunner:
             operation_reduction=comparison['operation_reduction'] if comparison else None,
             matching_is_optimal=matching_comparison['is_optimal'] if matching_comparison else None,
             matching_quality_ratio=matching_comparison['quality'] if matching_comparison else None,
-            matching_size_difference=matching_comparison['size_difference'] if matching_comparison else None
+            matching_size_difference=matching_comparison['size_difference'] if matching_comparison else None,
+            bb_vs_exhaustive_speedup=bb_vs_exhaustive_speedup,
+            bb_vs_exhaustive_operation_reduction=bb_vs_exhaustive_operation_reduction
         )
 
         if verbose:
+            output_parts = []
+
+            # Show optimal matching result (polynomial optimal)
+            if optimal_matching_metrics and not optimal_matching_failed:
+                output_parts.append(f"OptMatch={optimal_matching_metrics.solution_size}")
+
+            # Show exhaustive result if available
             if exhaustive_metrics and not exhaustive_timed_out:
-                print(f"Optimal={exhaustive_metrics.solution_size}, "
-                      f"GreedyCov={greedy_metrics.solution_size}, "
-                      f"GreedyMatch={greedy_matching_metrics.solution_size}, "
-                      f"QualityCov={comparison['quality']:.2f}, "
-                      f"QualityMatch={matching_comparison['quality']:.2f}")
-            else:
-                print(f"GreedyCov={greedy_metrics.solution_size}, "
-                      f"GreedyMatch={greedy_matching_metrics.solution_size} "
-                      f"(optimal unknown)")
+                output_parts.append(f"Exhaust={exhaustive_metrics.solution_size}")
+
+            # Show Branch & Bound if available
+            if branch_bound_metrics and not branch_bound_timed_out:
+                output_parts.append(f"B&B={branch_bound_metrics.solution_size}")
+                if bb_vs_exhaustive_speedup:
+                    output_parts.append(f"BB_Speedup={bb_vs_exhaustive_speedup:.1f}x")
+
+            # Always show greedy results
+            output_parts.append(f"GreedyCov={greedy_metrics.solution_size}")
+            output_parts.append(f"GreedyMatch={greedy_matching_metrics.solution_size}")
+
+            # Show quality if we have optimal reference
+            if comparison:
+                output_parts.append(f"CovQual={comparison['quality']:.2f}")
+            if matching_comparison:
+                output_parts.append(f"MatchQual={matching_comparison['quality']:.2f}")
+
+            print(", ".join(output_parts))
 
         return result
 
