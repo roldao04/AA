@@ -209,6 +209,153 @@ class Graph:
         all_vertex_ids = {v.id for v in self.vertices}
         return all_vertex_ids - covered_vertices
 
+    def to_dict(self) -> dict:
+        """
+        Serialize graph to dictionary format (for JSON export).
+
+        Returns:
+            Dictionary representation of the graph
+        """
+        return {
+            'vertices': [
+                {'id': v.id, 'x': v.x, 'y': v.y}
+                for v in self.vertices
+            ],
+            'edges': [
+                {'v1_id': e.v1.id, 'v2_id': e.v2.id}
+                for e in self.edges
+            ],
+            'metadata': {
+                'num_vertices': self.num_vertices(),
+                'num_edges': self.num_edges(),
+                'edge_density': self.edge_density(),
+                'has_isolated_vertices': self.has_isolated_vertices()
+            }
+        }
+
+    @staticmethod
+    def from_dict(data: dict) -> 'Graph':
+        """
+        Deserialize graph from dictionary format.
+
+        Args:
+            data: Dictionary with 'vertices' and 'edges' keys
+
+        Returns:
+            Graph object reconstructed from dictionary
+        """
+        graph = Graph()
+
+        # Recreate vertices
+        vertex_objects = {}
+        for v_data in data['vertices']:
+            v = Vertex(v_data['id'], v_data['x'], v_data['y'])
+            graph.add_vertex(v)
+            vertex_objects[v.id] = v
+
+        # Recreate edges
+        for e_data in data['edges']:
+            v1 = vertex_objects[e_data['v1_id']]
+            v2 = vertex_objects[e_data['v2_id']]
+            edge = Edge(v1, v2)
+            graph.add_edge(edge)
+
+        return graph
+
+    def save_to_file(self, filepath: str) -> None:
+        """
+        Save graph to JSON file.
+
+        Args:
+            filepath: Path where to save the graph (should end in .json)
+        """
+        import json
+        from pathlib import Path
+
+        data = self.to_dict()
+
+        output_path = Path(filepath)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path, 'w') as f:
+            json.dump(data, f, indent=2)
+
+    @staticmethod
+    def load_from_file(filepath: str) -> 'Graph':
+        """
+        Load graph from JSON file.
+
+        Args:
+            filepath: Path to the JSON file
+
+        Returns:
+            Graph object loaded from file
+        """
+        import json
+
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+
+        return Graph.from_dict(data)
+
+    def get_adjacency_matrix(self) -> List[List[int]]:
+        """
+        Get adjacency matrix representation of the graph.
+
+        Returns:
+            n x n matrix where matrix[i][j] = 1 if edge (i,j) exists, 0 otherwise
+            Rows and columns correspond to vertex IDs in sorted order
+        """
+        n = self.num_vertices()
+        if n == 0:
+            return []
+
+        # Get sorted vertex IDs for consistent indexing
+        vertex_ids = sorted([v.id for v in self.vertices])
+        id_to_index = {vid: idx for idx, vid in enumerate(vertex_ids)}
+
+        # Initialize matrix with zeros
+        matrix = [[0 for _ in range(n)] for _ in range(n)]
+
+        # Fill in edges
+        for edge in self.edges:
+            i = id_to_index[edge.v1.id]
+            j = id_to_index[edge.v2.id]
+            matrix[i][j] = 1
+            matrix[j][i] = 1  # Undirected graph
+
+        return matrix
+
+    def get_incidence_matrix(self) -> List[List[int]]:
+        """
+        Get incidence matrix representation of the graph.
+
+        Returns:
+            n x m matrix where matrix[i][j] = 1 if vertex i is incident to edge j
+            Rows correspond to vertices (sorted by ID), columns to edges
+        """
+        n = self.num_vertices()
+        m = self.num_edges()
+
+        if n == 0 or m == 0:
+            return [[]]
+
+        # Get sorted vertex IDs and edge list
+        vertex_ids = sorted([v.id for v in self.vertices])
+        id_to_index = {vid: idx for idx, vid in enumerate(vertex_ids)}
+
+        # Initialize matrix with zeros
+        matrix = [[0 for _ in range(m)] for _ in range(n)]
+
+        # Fill in incidences
+        for j, edge in enumerate(self.edges):
+            i1 = id_to_index[edge.v1.id]
+            i2 = id_to_index[edge.v2.id]
+            matrix[i1][j] = 1
+            matrix[i2][j] = 1
+
+        return matrix
+
     def __repr__(self):
         return f"Graph(V={self.num_vertices()}, E={self.num_edges()})"
 

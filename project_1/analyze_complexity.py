@@ -82,7 +82,7 @@ def analyze_exhaustive_complexity(results: List[Dict]) -> ComplexityFit:
     ]
 
     if not valid_results:
-        print("⚠ No valid exhaustive search results found")
+        print("WARNING:No valid exhaustive search results found")
         return None
 
     edges = [r['num_edges'] for r in valid_results]
@@ -107,7 +107,7 @@ def analyze_branch_bound_complexity(results: List[Dict]) -> ComplexityFit:
     ]
 
     if not valid_results:
-        print("⚠ No valid Branch & Bound results found")
+        print("WARNING:No valid Branch & Bound results found")
         return None
 
     edges = [r['num_edges'] for r in valid_results]
@@ -132,7 +132,7 @@ def analyze_optimal_matching_complexity(results: List[Dict]) -> ComplexityFit:
     ]
 
     if not valid_results:
-        print("⚠ No valid Optimal Matching results found")
+        print("WARNING:No valid Optimal Matching results found")
         return None
 
     vertices = [r['num_vertices'] for r in valid_results]
@@ -157,7 +157,7 @@ def analyze_greedy_coverage_complexity(results: List[Dict]) -> ComplexityFit:
     ]
 
     if not valid_results:
-        print("⚠ No valid Greedy Coverage results found")
+        print("WARNING:No valid Greedy Coverage results found")
         return None
 
     # Use m*n as the size metric
@@ -184,7 +184,7 @@ def analyze_greedy_matching_complexity(results: List[Dict]) -> ComplexityFit:
     ]
 
     if not valid_results:
-        print("⚠ No valid Greedy Matching results found")
+        print("WARNING:No valid Greedy Matching results found")
         return None
 
     edges = [r['num_edges'] for r in valid_results]
@@ -216,13 +216,13 @@ def generate_validation_report(fits: Dict[str, ComplexityFit]) -> None:
 
         # Determine fit quality
         if fit.r_squared >= 0.95:
-            quality = "Excellent ✓"
+            quality = "Excellent"
         elif fit.r_squared >= 0.85:
             quality = "Good"
         elif fit.r_squared >= 0.70:
             quality = "Fair"
         else:
-            quality = "Poor ⚠"
+            quality = "Poor"
 
         print(f"{name:<25} {fit.complexity_class:<15} {fit.coefficient:<15.2e} {fit.r_squared:<10.4f} {quality:<15}")
 
@@ -251,14 +251,14 @@ def generate_validation_report(fits: Dict[str, ComplexityFit]) -> None:
 
     if total_fits > 0:
         percentage = (good_fits / total_fits) * 100
-        print(f"\n✓ {good_fits}/{total_fits} algorithms ({percentage:.0f}%) show good or excellent fit (R² ≥ 0.85)")
+        print(f"\n{good_fits}/{total_fits} algorithms ({percentage:.0f}%) show good or excellent fit (R² ≥ 0.85)")
 
         if percentage >= 80:
-            print("✓ Experimental results STRONGLY VALIDATE theoretical Big-O analysis")
+            print("Experimental results STRONGLY VALIDATE theoretical Big-O analysis")
         elif percentage >= 60:
-            print("✓ Experimental results VALIDATE theoretical Big-O analysis")
+            print("Experimental results VALIDATE theoretical Big-O analysis")
         else:
-            print("⚠ Experimental results show MIXED alignment with theoretical analysis")
+            print("WARNING:Experimental results show MIXED alignment with theoretical analysis")
 
     print("\nKey Findings:")
     print("• Exponential algorithms (Exhaustive, B&B) show O(2^m) growth as predicted")
@@ -299,23 +299,23 @@ def main():
 
     print("1. Exhaustive Search (O(2^m))...", end=" ")
     fits['Exhaustive Search'] = analyze_exhaustive_complexity(results)
-    print("✓" if fits['Exhaustive Search'] else "✗")
+    print("[OK]" if fits['Exhaustive Search'] else "✗")
 
     print("2. Branch & Bound (O(2^m))...", end=" ")
     fits['Branch & Bound'] = analyze_branch_bound_complexity(results)
-    print("✓" if fits['Branch & Bound'] else "✗")
+    print("[OK]" if fits['Branch & Bound'] else "✗")
 
     print("3. Optimal Matching (O(n^2.5))...", end=" ")
     fits['Optimal Matching'] = analyze_optimal_matching_complexity(results)
-    print("✓" if fits['Optimal Matching'] else "✗")
+    print("[OK]" if fits['Optimal Matching'] else "✗")
 
     print("4. Greedy Coverage (O(m*n))...", end=" ")
     fits['Greedy Coverage'] = analyze_greedy_coverage_complexity(results)
-    print("✓" if fits['Greedy Coverage'] else "✗")
+    print("[OK]" if fits['Greedy Coverage'] else "✗")
 
     print("5. Greedy Matching (O(m))...", end=" ")
     fits['Greedy Matching'] = analyze_greedy_matching_complexity(results)
-    print("✓" if fits['Greedy Matching'] else "✗")
+    print("[OK]" if fits['Greedy Matching'] else "✗")
 
     print("-" * 80 + "\n")
 
@@ -327,7 +327,7 @@ def main():
     print(f"Saving validation report to: {output_file}")
 
     # Note: In production, would redirect stdout to file here
-    print("✓ Complexity validation complete!")
+    print("Complexity validation complete!")
 
 
 if __name__ == "__main__":

@@ -85,11 +85,11 @@ def test_simple_graph():
 
     # Verify solution is valid
     assert graph.is_edge_cover(exhaustive_metrics.solution), "Solution is not a valid edge cover!"
-    print("  ✓ Solution is valid edge cover")
+    print("  Solution is valid edge cover")
 
     # For a square, minimum edge cover should be 2 (opposite edges)
     assert exhaustive_metrics.solution_size == 2, f"Expected size 2, got {exhaustive_metrics.solution_size}"
-    print("  ✓ Solution is optimal (size 2)")
+    print("  Solution is optimal (size 2)")
 
     # Test greedy heuristic
     greedy = GreedyHeuristic(graph)
@@ -103,9 +103,9 @@ def test_simple_graph():
 
     # Verify solution is valid
     assert graph.is_edge_cover(greedy_metrics.solution), "Greedy solution is not a valid edge cover!"
-    print("  ✓ Solution is valid edge cover")
+    print("  Solution is valid edge cover")
 
-    print("\n✓ Test 1 PASSED\n")
+    print("\nTest 1 PASSED\n")
 
 
 def test_generated_graph():
@@ -124,7 +124,7 @@ def test_generated_graph():
 
     # Check no isolated vertices
     assert not graph.has_isolated_vertices(), "Graph has isolated vertices!"
-    print("✓ No isolated vertices")
+    print("No isolated vertices")
 
     # Test exhaustive search
     exhaustive = ExhaustiveSearch(graph)
@@ -137,7 +137,7 @@ def test_generated_graph():
 
     # Verify solution
     assert graph.is_edge_cover(exhaustive_metrics.solution), "Solution is not a valid edge cover!"
-    print("  ✓ Solution is valid edge cover")
+    print("  Solution is valid edge cover")
 
     # Test greedy
     greedy = GreedyHeuristic(graph)
@@ -148,14 +148,14 @@ def test_generated_graph():
     print(f"  Time: {greedy_metrics.execution_time:.6f}s")
 
     assert graph.is_edge_cover(greedy_metrics.solution), "Greedy solution is not a valid edge cover!"
-    print("  ✓ Solution is valid edge cover")
+    print("  Solution is valid edge cover")
 
     # Greedy should be close to optimal
     ratio = exhaustive_metrics.solution_size / greedy_metrics.solution_size
     print(f"\nQuality ratio: {ratio:.3f}")
     print(f"Speedup: {exhaustive_metrics.execution_time / greedy_metrics.execution_time:.1f}x")
 
-    print("\n✓ Test 2 PASSED\n")
+    print("\nTest 2 PASSED\n")
 
 
 def test_complete_graph():
@@ -215,7 +215,7 @@ def test_seed_reproducibility():
 
     # Verify they are DIFFERENT (seed advances naturally)
     assert positions1 != positions2, "Graphs should have different vertex positions!"
-    print("✓ Graphs have different vertex positions (seed advances)")
+    print("Graphs have different vertex positions (seed advances)")
 
     # Verify reproducibility: resetting generator should give same sequence
     generator2 = GraphGenerator(seed=DEFAULT_SEED)
@@ -227,9 +227,9 @@ def test_seed_reproducibility():
 
     assert positions1 == positions3, "First graph should be reproducible"
     assert positions2 == positions4, "Second graph should be reproducible"
-    print("✓ Graph generation is reproducible with same seed")
+    print("Graph generation is reproducible with same seed")
 
-    print("✓ Test 4 PASSED\n")
+    print("Test 4 PASSED\n")
 
 
 def test_timeout_protection():
@@ -246,8 +246,8 @@ def test_timeout_protection():
 
     # This should skip exhaustive search entirely (> 25 edges)
     if large_graph.num_edges() > 25:
-        print("✓ Graph has > 25 edges, exhaustive will be skipped (expected)")
-        print("✓ Test 5 PASSED (timeout protection via edge count limit)\n")
+        print("Graph has > 25 edges, exhaustive will be skipped (expected)")
+        print("Test 5 PASSED (timeout protection via edge count limit)\n")
         return
 
     # If edges <= 25, test actual timeout
@@ -260,8 +260,8 @@ def test_timeout_protection():
 
     # Should timeout or skip
     assert result.exhaustive_timed_out, "Exhaustive search should timeout or be skipped"
-    print("✓ Exhaustive search timed out or was skipped as expected")
-    print("✓ Test 5 PASSED\n")
+    print("Exhaustive search timed out or was skipped as expected")
+    print("Test 5 PASSED\n")
 
 
 def test_input_validation():
@@ -275,40 +275,40 @@ def test_input_validation():
         generator.generate_graph(num_vertices=-5, edge_density=50.0)
         assert False, "Should have raised exception for negative vertices"
     except InvalidConfigurationException as e:
-        print(f"✓ Negative vertices rejected: {str(e)[:50]}...")
+        print(f"Negative vertices rejected: {str(e)[:50]}...")
 
     try:
         generator.generate_graph(num_vertices=1, edge_density=50.0)
         assert False, "Should have raised exception for < 2 vertices"
     except InvalidConfigurationException as e:
-        print(f"✓ Single vertex rejected: {str(e)[:50]}...")
+        print(f"Single vertex rejected: {str(e)[:50]}...")
 
     try:
         generator.generate_graph(num_vertices=10000, edge_density=50.0)
         assert False, "Should have raised exception for too many vertices"
     except InvalidConfigurationException as e:
-        print(f"✓ Too many vertices rejected: {str(e)[:50]}...")
+        print(f"Too many vertices rejected: {str(e)[:50]}...")
 
     # Test invalid edge_density
     try:
         generator.generate_graph(num_vertices=5, edge_density=-10.0)
         assert False, "Should have raised exception for negative density"
     except InvalidConfigurationException as e:
-        print(f"✓ Negative density rejected: {str(e)[:50]}...")
+        print(f"Negative density rejected: {str(e)[:50]}...")
 
     try:
         generator.generate_graph(num_vertices=5, edge_density=150.0)
         assert False, "Should have raised exception for > 100 density"
     except InvalidConfigurationException as e:
-        print(f"✓ Density > 100 rejected: {str(e)[:50]}...")
+        print(f"Density > 100 rejected: {str(e)[:50]}...")
 
     try:
         generator.generate_graph(num_vertices=5, edge_density="50%")
         assert False, "Should have raised exception for string density"
     except InvalidConfigurationException as e:
-        print(f"✓ Non-numeric density rejected: {str(e)[:50]}...")
+        print(f"Non-numeric density rejected: {str(e)[:50]}...")
 
-    print("✓ Test 6 PASSED\n")
+    print("Test 6 PASSED\n")
 
 
 def test_edge_cover_validation():
@@ -334,7 +334,7 @@ def test_edge_cover_validation():
     # Valid edge cover
     valid_cover = {e01, e12}
     assert graph.is_edge_cover(valid_cover), "Valid cover should be accepted"
-    print("✓ Valid edge cover accepted")
+    print("Valid edge cover accepted")
 
     # Invalid: edge not in graph
     v3 = Vertex(3, 200, 200)
@@ -345,14 +345,14 @@ def test_edge_cover_validation():
         graph.is_edge_cover(invalid_cover)
         assert False, "Should have raised exception for foreign edge"
     except ValueError as e:
-        print(f"✓ Foreign edge rejected: {str(e)[:50]}...")
+        print(f"Foreign edge rejected: {str(e)[:50]}...")
 
     # Invalid: doesn't cover all vertices
     incomplete_cover = {e01}  # Missing v2
     assert not graph.is_edge_cover(incomplete_cover), "Incomplete cover should be invalid"
-    print("✓ Incomplete edge cover rejected")
+    print("Incomplete edge cover rejected")
 
-    print("✓ Test 7 PASSED\n")
+    print("Test 7 PASSED\n")
 
 
 def test_greedy_matching_based():
@@ -382,19 +382,19 @@ def test_greedy_matching_based():
     assert graph.is_edge_cover(exhaustive_metrics.solution), "Exhaustive solution invalid"
     assert graph.is_edge_cover(greedy_cov_metrics.solution), "Greedy coverage solution invalid"
     assert graph.is_edge_cover(greedy_match_metrics.solution), "Greedy matching solution invalid"
-    print("✓ All algorithms produce valid edge covers")
+    print("All algorithms produce valid edge covers")
 
     # Verify optimal is actually minimal
     assert exhaustive_metrics.solution_size <= greedy_cov_metrics.solution_size
     assert exhaustive_metrics.solution_size <= greedy_match_metrics.solution_size
-    print("✓ Optimal solution is indeed minimal")
+    print("Optimal solution is indeed minimal")
 
     # Verify greedy algorithms are fast
     assert greedy_cov_metrics.execution_time < exhaustive_metrics.execution_time
     assert greedy_match_metrics.execution_time < exhaustive_metrics.execution_time
-    print("✓ Greedy algorithms are faster than exhaustive")
+    print("Greedy algorithms are faster than exhaustive")
 
-    print("✓ Test 8 PASSED\n")
+    print("Test 8 PASSED\n")
 
 
 def test_experiment_runner_integration():
@@ -425,20 +425,20 @@ def test_experiment_runner_integration():
     assert result.num_edges > 0
     assert result.greedy_solution_size is not None
     assert result.greedy_matching_solution_size is not None
-    print("✓ Experiment result has all required fields")
+    print("Experiment result has all required fields")
 
     # Verify both greedy variants are present
     assert result.greedy_matching_time > 0
     assert result.greedy_matching_operations > 0
-    print("✓ Both greedy variants are executed")
+    print("Both greedy variants are executed")
 
     # Verify comparison metrics exist
     if not result.exhaustive_timed_out:
         assert result.is_optimal is not None
         assert result.matching_is_optimal is not None
-        print("✓ Comparison metrics are computed")
+        print("Comparison metrics are computed")
 
-    print("✓ Test 9 PASSED\n")
+    print("Test 9 PASSED\n")
 
 
 def test_optimal_matching_algorithm():
@@ -479,15 +479,15 @@ def test_optimal_matching_algorithm():
 
         # Verify solution is valid edge cover
         assert graph.is_edge_cover(result.solution), "Solution must be valid edge cover"
-        print("✓ Solution is a valid edge cover")
+        print("Solution is a valid edge cover")
 
         # For this graph, optimal is 2 (any two opposite edges)
         assert result.solution_size == 2, f"Expected size 2, got {result.solution_size}"
-        print("✓ Solution is optimal (size = 2)")
+        print("Solution is optimal (size = 2)")
 
         # Verify optimality flag
         assert result.is_optimal == True, "Algorithm should guarantee optimality"
-        print("✓ Optimality guarantee is correct")
+        print("Optimality guarantee is correct")
 
         # Test on a larger random graph
         generator = GraphGenerator(seed=DEFAULT_SEED)
@@ -497,15 +497,15 @@ def test_optimal_matching_algorithm():
         large_result = optimal_matching_large.find_minimum_edge_cover()
 
         assert large_graph.is_edge_cover(large_result.solution), "Large graph solution must be valid"
-        print(f"✓ Works on larger graph (V={20}, E={large_graph.num_edges()})")
+        print(f"Works on larger graph (V={20}, E={large_graph.num_edges()})")
 
     except ImportError as e:
         print(f"⚠ NetworkX not installed - skipping test: {e}")
         print("  Install with: pip install networkx")
-        print("✓ Test 10 SKIPPED (NetworkX required)\n")
+        print("Test 10 SKIPPED (NetworkX required)\n")
         return
 
-    print("✓ Test 10 PASSED\n")
+    print("Test 10 PASSED\n")
 
 
 def test_branch_and_bound_algorithm():
@@ -527,11 +527,11 @@ def test_branch_and_bound_algorithm():
 
     # Verify solution is valid edge cover
     assert graph.is_edge_cover(bb_result.solution), "B&B solution must be valid edge cover"
-    print("✓ Solution is a valid edge cover")
+    print("Solution is a valid edge cover")
 
     # Verify optimality flag
     assert bb_result.is_optimal == True, "B&B should guarantee optimality"
-    print("✓ Optimality guarantee is correct")
+    print("Optimality guarantee is correct")
 
     # Compare with exhaustive search - should give same answer
     exhaustive = ExhaustiveSearch(graph)
@@ -539,14 +539,14 @@ def test_branch_and_bound_algorithm():
 
     assert bb_result.solution_size == exhaustive_result.solution_size, \
         f"B&B and Exhaustive should find same optimal size (B&B={bb_result.solution_size}, Exhaustive={exhaustive_result.solution_size})"
-    print("✓ B&B finds same optimal size as exhaustive search")
+    print("B&B finds same optimal size as exhaustive search")
 
     # B&B should explore fewer or equal solutions (due to pruning)
     assert bb_result.solutions_explored <= exhaustive_result.solutions_explored, \
         "B&B should explore fewer or equal solutions due to pruning"
     print(f"✓ B&B pruning effective: {bb_result.solutions_explored} vs {exhaustive_result.solutions_explored} solutions")
 
-    print("✓ Test 11 PASSED\n")
+    print("Test 11 PASSED\n")
 
 
 def test_optimality_comparison():
@@ -574,21 +574,21 @@ def test_optimality_comparison():
         # All three should find the same optimal size
         assert exhaustive_result.solution_size == bb_result.solution_size == optimal_result.solution_size, \
             f"All optimal algorithms should agree (Exhaustive={exhaustive_result.solution_size}, B&B={bb_result.solution_size}, OptMatch={optimal_result.solution_size})"
-        print("✓ All three optimal algorithms agree on optimal size")
+        print("All three optimal algorithms agree on optimal size")
 
         # Optimal matching should be fastest (polynomial vs exponential)
         if graph.num_edges() > 10:
             assert optimal_result.execution_time < exhaustive_result.execution_time, \
                 "Optimal matching should be faster than exhaustive for non-trivial graphs"
-            print("✓ Polynomial algorithm is faster than exponential")
+            print("Polynomial algorithm is faster than exponential")
 
     except ImportError:
-        print("⚠ NetworkX not installed - comparing only Exhaustive and B&B")
+        print("NetworkX not installed - comparing only Exhaustive and B&B")
         assert exhaustive_result.solution_size == bb_result.solution_size, \
             "Exhaustive and B&B should agree on optimal size"
-        print("✓ Exhaustive and B&B agree on optimal size")
+        print("Exhaustive and B&B agree on optimal size")
 
-    print("✓ Test 12 PASSED\n")
+    print("Test 12 PASSED\n")
 
 
 def test_large_graph_polynomial():
@@ -614,24 +614,24 @@ def test_large_graph_polynomial():
 
         # Verify solution is valid
         assert large_graph.is_edge_cover(result.solution), "Large graph solution must be valid edge cover"
-        print("✓ Solution is a valid edge cover")
+        print("Solution is a valid edge cover")
 
         # Should complete in reasonable time (< 5 seconds for polynomial)
         assert elapsed < 5.0, f"Polynomial algorithm should complete quickly (took {elapsed:.2f}s)"
-        print("✓ Completes in polynomial time")
+        print("Completes in polynomial time")
 
         # Solution size should be reasonable (between n/2 and n-1)
         n = large_graph.num_vertices()
         assert n//2 <= result.solution_size <= n-1, \
             f"Solution size {result.solution_size} should be between {n//2} and {n-1}"
-        print("✓ Solution size is reasonable")
+        print("Solution size is reasonable")
 
-        print("✓ Test 13 PASSED\n")
+        print("Test 13 PASSED\n")
 
     except ImportError as e:
         print(f"⚠ NetworkX not installed - skipping test: {e}")
         print("  This test demonstrates the advantage of polynomial-time algorithms")
-        print("✓ Test 13 SKIPPED (NetworkX required)\n")
+        print("Test 13 SKIPPED (NetworkX required)\n")
 
 
 # ============================================================================
@@ -659,14 +659,14 @@ def run_all_tests():
         test_greedy_matching_based()
         test_experiment_runner_integration()
 
-        # New algorithm tests (Phase 2)
+        # Additional algorithm tests
         test_optimal_matching_algorithm()
         test_branch_and_bound_algorithm()
         test_optimality_comparison()
         test_large_graph_polynomial()
 
         print("=" * 70)
-        print("ALL TESTS PASSED ✓ (13/13)")
+        print("ALL TESTS PASSED (13/13)")
         print("=" * 70)
         return True
 

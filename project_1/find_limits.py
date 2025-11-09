@@ -147,7 +147,7 @@ def find_limit_for_algorithm(
             )
 
         if success:
-            print(f"✓ {exec_time:.4f}s")
+            print(f"[OK] {exec_time:.4f}s")
             last_successful_size = n
             last_successful_edges = m
             last_execution_time = exec_time
@@ -205,13 +205,13 @@ def generate_limits_report(limits: List[AlgorithmLimit]) -> None:
     print("ANALYSIS BY COMPLEXITY CLASS")
     print("=" * 80)
 
-    print("\n📊 Exponential Algorithms (O(2^m)):")
+    print("\nExponential Algorithms (O(2^m)):")
     exponential = [l for l in limits if l.algorithm_name in ["Exhaustive Search", "Branch & Bound"]]
     for limit in exponential:
         if limit.max_vertices > 0:
             print(f"  • {limit.algorithm_name}: max {limit.max_vertices} vertices, {limit.max_edges} edges")
 
-    print("\n📊 Polynomial Algorithms (O(n^2.5) or better):")
+    print("\nPolynomial Algorithms (O(n^2.5) or better):")
     polynomial = [l for l in limits if l.algorithm_name not in ["Exhaustive Search", "Branch & Bound"]]
     for limit in polynomial:
         if limit.max_vertices > 0:
@@ -225,7 +225,7 @@ def generate_limits_report(limits: List[AlgorithmLimit]) -> None:
     exp_limits = [l for l in exponential if l.max_vertices > 0]
     if exp_limits:
         avg_exp_limit = sum(l.max_edges for l in exp_limits) / len(exp_limits)
-        print(f"\n✓ Exponential algorithms practical up to ~{int(avg_exp_limit)} edges")
+        print(f"\nExponential algorithms practical up to ~{int(avg_exp_limit)} edges")
         print(f"  - Beyond this, execution time exceeds reasonable limits")
         print(f"  - Branch & Bound provides modest improvement over Exhaustive")
 
@@ -233,7 +233,7 @@ def generate_limits_report(limits: List[AlgorithmLimit]) -> None:
     poly_limits = [l for l in polynomial if l.max_vertices > 0]
     if poly_limits:
         max_poly = max(l.max_vertices for l in poly_limits)
-        print(f"\n✓ Polynomial algorithms scale to {max_poly}+ vertices")
+        print(f"\nPolynomial algorithms scale to {max_poly}+ vertices")
         print(f"  - Optimal Matching can handle graphs with 1000s of vertices")
         print(f"  - Greedy heuristics are extremely fast for all tested sizes")
 
@@ -287,7 +287,7 @@ def main():
     output_file.parent.mkdir(exist_ok=True)
 
     print(f"Saving limits report to: {output_file}")
-    print("✓ Limits analysis complete!")
+    print("Limits analysis complete!")
 
 
 if __name__ == "__main__":

@@ -333,10 +333,11 @@ def extrapolate_performance(
             degree = float(degree_str)
             predicted_time = polynomial_model(size, degree, fit.coefficient)
         elif fit.complexity_class == "O(m*n)":
-            # Assume square growth (n = m)
-            predicted_time = quadratic_model(size, size, fit.coefficient)
-        elif fit.complexity_class == "O(n)":
-            predicted_time = linear_model(size, fit.coefficient)
+            # Approximation: For constant edge density, m ∝ n^2, so m*n ∝ n^3
+            # Using size as vertex count (n) and estimating m based on typical densities
+            # Note: This is a rough approximation; accuracy depends on actual edge density
+            estimated_edges = size * size * 0.15  # Assume ~15% edge density
+            predicted_time = quadratic_model(estimated_edges, size, fit.coefficient)
         else:
             raise ValueError(f"Unknown complexity class: {fit.complexity_class}")
 

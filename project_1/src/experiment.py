@@ -24,6 +24,11 @@ from src.algorithms import (
 )
 from src.exceptions import AlgorithmTimeoutException
 from src.logger import setup_logger
+from src.graph_visualization import (
+    draw_graph,
+    draw_graph_with_solution,
+    draw_solution_comparison
+)
 
 # Set up module logger
 logger = setup_logger(__name__)
@@ -166,19 +171,109 @@ class ExperimentRunner:
         self.generator = GraphGenerator(seed=seed)
         self.results: List[ExperimentResult] = []
 
+    def save_graph_artifacts(
+        self,
+        graph: Graph,
+        num_vertices: int,
+        edge_density: float,
+        solutions: Dict[str, Any] = None
+    ) -> None:
+        """
+        Save graph instance and solution visualizations.
+
+        Args:
+            graph: Graph object to save
+            num_vertices: Number of vertices (for filename)
+            edge_density: Edge density (for filename)
+            solutions: Dictionary of algorithm_name -> (edge_cover_set, is_optimal)
+        """
+        # Create subdirectories
+        graphs_dir = self.output_dir / "graphs"
+        instances_dir = graphs_dir / "instances"
+        solutions_dir = graphs_dir / "solutions"
+        comparisons_dir = graphs_dir / "comparisons"
+
+        instances_dir.mkdir(parents=True, exist_ok=True)
+        solutions_dir.mkdir(parents=True, exist_ok=True)
+        comparisons_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate filename prefix
+        filename_prefix = f"graph_v{num_vertices}_d{edge_density:.1f}"
+
+        # Save graph to JSON
+        graph_json_path = instances_dir / f"{filename_prefix}.json"
+        try:
+            graph.save_to_file(str(graph_json_path))
+            logger.info(f"Saved graph instance: {graph_json_path}")
+        except Exception as e:
+            logger.error(f"Error saving graph JSON: {e}")
+
+        # Visualize graph instance
+        try:
+            draw_graph(
+                graph,
+                filename=f"{filename_prefix}.png",
+                output_dir=str(instances_dir),
+                title=f"Graph: V={num_vertices}, E={graph.num_edges()}, Density={edge_density:.1f}%"
+            )
+        except Exception as e:
+            logger.error(f"Error visualizing graph instance: {e}")
+
+        # Visualize solutions if provided
+        if solutions:
+            # Individual solution visualizations
+            for algo_name, (edge_cover, is_optimal) in solutions.items():
+                if edge_cover is not None:
+                    algo_dir = solutions_dir / algo_name.lower().replace(" ", "_")
+                    algo_dir.mkdir(parents=True, exist_ok=True)
+
+                    try:
+                        draw_graph_with_solution(
+                            graph,
+                            edge_cover,
+                            filename=f"{filename_prefix}_{algo_name.lower().replace(' ', '_')}.png",
+                            output_dir=str(algo_dir),
+                            algorithm_name=algo_name,
+                            is_optimal=is_optimal
+                        )
+                    except Exception as e:
+                        logger.error(f"Error visualizing {algo_name} solution: {e}")
+
+            # Comparison visualization
+            try:
+                comparison_solutions = {
+                    name: edges for name, (edges, _) in solutions.items() if edges is not None
+                }
+                optimal_algos = {
+                    name for name, (_, is_opt) in solutions.items() if is_opt
+                }
+
+                if comparison_solutions:
+                    draw_solution_comparison(
+                        graph,
+                        comparison_solutions,
+                        filename=f"{filename_prefix}_comparison.png",
+                        output_dir=str(comparisons_dir),
+                        optimal_algorithms=optimal_algos
+                    )
+            except Exception as e:
+                logger.error(f"Error creating comparison visualization: {e}")
+
     def run_single_experiment(
         self,
         num_vertices: int,
         edge_density: float,
-        verbose: bool = True
+        verbose: bool = True,
+        save_graphs: bool = False
     ) -> ExperimentResult:
         """
-        Run both algorithms on a single graph configuration.
+        Run all five algorithms on a single graph configuration.
 
         Args:
             num_vertices: Number of vertices in the graph
             edge_density: Edge density percentage
             verbose: Print progress information
+            save_graphs: Whether to save graph instances and visualizations
 
         Returns:
             ExperimentResult with all metrics
@@ -381,6 +476,17 @@ class ExperimentRunner:
 
             print(", ".join(output_parts))
 
+        # Save graph artifacts if requested
+        if save_graphs:
+            solutions = {
+                "Exhaustive Search": (exhaustive_metrics.solution if exhaustive_metrics else None, True),
+                "Branch & Bound": (branch_bound_metrics.solution if branch_bound_metrics else None, True),
+                "Optimal Matching": (optimal_matching_metrics.solution if optimal_matching_metrics else None, True),
+                "Greedy Coverage": (greedy_metrics.solution, False),
+                "Greedy Matching": (greedy_matching_metrics.solution, False)
+            }
+            self.save_graph_artifacts(graph, num_vertices, edge_density, solutions)
+
         return result
 
     def run_batch_experiments(
@@ -388,7 +494,9 @@ class ExperimentRunner:
         vertex_counts: List[int],
         edge_densities: List[float] = None,
         repetitions: int = 1,
-        verbose: bool = True
+        verbose: bool = True,
+        save_graphs: bool = False,
+        save_every_nth: int = 1
     ) -> List[ExperimentResult]:
         """
         Run experiments on a batch of configurations.
@@ -398,6 +506,8 @@ class ExperimentRunner:
             edge_densities: List of edge densities to test (default: [12.5, 25, 50, 75])
             repetitions: Number of times to repeat each configuration
             verbose: Print progress information
+            save_graphs: Whether to save graph instances and visualizations
+            save_every_nth: Save only every Nth graph (1=all, 2=every other, etc.)
 
         Returns:
             List of ExperimentResult objects
@@ -413,6 +523,7 @@ class ExperimentRunner:
             print(f"Timeout: {self.timeout_seconds}s\n")
 
         results = []
+        experiment_count = 0
 
         for rep in range(repetitions):
             if repetitions > 1 and verbose:
@@ -429,7 +540,11 @@ class ExperimentRunner:
                     # maintaining reproducibility (same sequence of graphs on every run).
                     # This aligns with PDF requirement: "generate graph instances" (plural).
 
-                    result = self.run_single_experiment(num_vertices, density, verbose)
+                    # Determine if we should save this graph
+                    experiment_count += 1
+                    should_save = save_graphs and (experiment_count % save_every_nth == 0)
+
+                    result = self.run_single_experiment(num_vertices, density, verbose, save_graphs=should_save)
                     results.append(result)
 
                     # Stop testing larger graphs if exhaustive is timing out
