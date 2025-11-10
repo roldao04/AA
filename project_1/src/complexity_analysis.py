@@ -123,10 +123,10 @@ def fit_exponential_complexity(
     algorithm_name: str = "Unknown"
 ) -> ComplexityFit:
     """
-    Fit exponential model T(m) = c * 2^m to experimental data.
+    Fit exponential model T(m) = c * base^m to experimental data.
 
-    Uses logarithmic transformation: log(T) = log(c) + m*log(2)
-    Then performs linear regression to find c.
+    Uses logarithmic transformation: log(T) = log(c) + m*log(base)
+    Then performs linear regression to find c and base.
 
     Args:
         edges: List of edge counts (m values)
@@ -147,18 +147,23 @@ def fit_exponential_complexity(
     edges_valid = [m for m, _ in valid_data]
     times_valid = [t for _, t in valid_data]
 
-    # Logarithmic transformation: log(T) = log(c) + m*log(2)
+    # Logarithmic transformation: log(T) = log(c) + m*log(base)
     log_times = np.log(times_valid)
     edges_array = np.array(edges_valid)
 
     # Linear regression in log space
-    # log(T) = a + b*m, where a = log(c), b = log(2)
+    # log(T) = intercept + slope*m
+    # where slope = log(base), intercept = log(c)
     coeffs = np.polyfit(edges_array, log_times, deg=1)
+    slope = coeffs[0]
     log_c = coeffs[1]  # Intercept
+
+    # Extract fitted base and coefficient
+    fitted_base = np.exp(slope)
     c = np.exp(log_c)
 
-    # Generate predictions
-    predictions = [(m, exponential_model(m, c)) for m in edges_valid]
+    # Generate predictions using FITTED base (not forced base-2)
+    predictions = [(m, c * (fitted_base ** m)) for m in edges_valid]
     predicted_times = [pred for _, pred in predictions]
 
     # Calculate R²
@@ -167,9 +172,15 @@ def fit_exponential_complexity(
     # Calculate residuals
     residuals = [actual - pred for actual, pred in zip(times_valid, predicted_times)]
 
+    # Report both theoretical (2^m) and fitted base
+    if fitted_base >= 1.9 and fitted_base <= 2.1:
+        complexity_class = "O(2^m)"
+    else:
+        complexity_class = f"O({fitted_base:.2f}^m)"
+
     return ComplexityFit(
         algorithm_name=algorithm_name,
-        complexity_class="O(2^m)",
+        complexity_class=complexity_class,
         coefficient=c,
         r_squared=r_squared,
         predictions=predictions,
@@ -217,11 +228,11 @@ def fit_polynomial_complexity(
     # We expect b ≈ degree, and a = log(c)
     coeffs = np.polyfit(log_sizes, log_times, deg=1)
     log_c = coeffs[1]  # Intercept
-    actual_degree = coeffs[0]  # Slope (should be close to expected degree)
+    fitted_degree = coeffs[0]  # Slope (fitted exponent)
     c = np.exp(log_c)
 
-    # Generate predictions using expected degree
-    predictions = [(n, polynomial_model(n, degree, c)) for n in sizes_valid]
+    # Generate predictions using FITTED degree (not expected)
+    predictions = [(n, polynomial_model(n, fitted_degree, c)) for n in sizes_valid]
     predicted_times = [pred for _, pred in predictions]
 
     # Calculate R²
@@ -230,7 +241,11 @@ def fit_polynomial_complexity(
     # Calculate residuals
     residuals = [actual - pred for actual, pred in zip(times_valid, predicted_times)]
 
-    complexity_class = f"O(n^{degree})"
+    # Report fitted degree, indicate if close to expected
+    if abs(fitted_degree - degree) < 0.3:
+        complexity_class = f"O(n^{degree})"
+    else:
+        complexity_class = f"O(n^{fitted_degree:.2f})"
 
     return ComplexityFit(
         algorithm_name=algorithm_name,

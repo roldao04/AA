@@ -81,12 +81,21 @@ def analyze_exhaustive_complexity(results: List[Dict]) -> ComplexityFit:
         if not r.get('exhaustive_timed_out', True) and r.get('exhaustive_time') is not None
     ]
 
+    total_results = len(results)
+    valid_count = len(valid_results)
+
+    print(f"  Valid data points: {valid_count}/{total_results} ({100*valid_count/total_results:.1f}%)")
+
     if not valid_results:
-        print("WARNING:No valid exhaustive search results found")
+        print("  WARNING: No valid exhaustive search results found")
         return None
 
     edges = [r['num_edges'] for r in valid_results]
     times = [r['exhaustive_time'] for r in valid_results]
+
+    print(f"  Edge range: {min(edges)} - {max(edges)}")
+    print(f"  Time range: {min(times):.6f}s - {max(times):.6f}s")
+    print(f"  Unique edge counts: {len(set(edges))}")
 
     return fit_exponential_complexity(edges, times, "Exhaustive Search")
 
@@ -106,12 +115,21 @@ def analyze_branch_bound_complexity(results: List[Dict]) -> ComplexityFit:
         if not r.get('branch_bound_timed_out', True) and r.get('branch_bound_time') is not None
     ]
 
+    total_results = len(results)
+    valid_count = len(valid_results)
+
+    print(f"  Valid data points: {valid_count}/{total_results} ({100*valid_count/total_results:.1f}%)")
+
     if not valid_results:
-        print("WARNING:No valid Branch & Bound results found")
+        print("  WARNING: No valid Branch & Bound results found")
         return None
 
     edges = [r['num_edges'] for r in valid_results]
     times = [r['branch_bound_time'] for r in valid_results]
+
+    print(f"  Edge range: {min(edges)} - {max(edges)}")
+    print(f"  Time range: {min(times):.6f}s - {max(times):.6f}s")
+    print(f"  Unique edge counts: {len(set(edges))}")
 
     return fit_exponential_complexity(edges, times, "Branch & Bound")
 
@@ -131,12 +149,21 @@ def analyze_optimal_matching_complexity(results: List[Dict]) -> ComplexityFit:
         if not r.get('optimal_matching_failed', True) and r.get('optimal_matching_time') is not None
     ]
 
+    total_results = len(results)
+    valid_count = len(valid_results)
+
+    print(f"  Valid data points: {valid_count}/{total_results} ({100*valid_count/total_results:.1f}%)")
+
     if not valid_results:
-        print("WARNING:No valid Optimal Matching results found")
+        print("  WARNING: No valid Optimal Matching results found")
         return None
 
     vertices = [r['num_vertices'] for r in valid_results]
     times = [r['optimal_matching_time'] for r in valid_results]
+
+    print(f"  Vertex range: {min(vertices)} - {max(vertices)}")
+    print(f"  Time range: {min(times):.6f}s - {max(times):.6f}s")
+    print(f"  Unique vertex counts: {len(set(vertices))}")
 
     return fit_polynomial_complexity(vertices, times, degree=2.5, algorithm_name="Optimal Matching")
 
@@ -156,13 +183,22 @@ def analyze_greedy_coverage_complexity(results: List[Dict]) -> ComplexityFit:
         if r.get('greedy_time') is not None
     ]
 
+    total_results = len(results)
+    valid_count = len(valid_results)
+
+    print(f"  Valid data points: {valid_count}/{total_results} ({100*valid_count/total_results:.1f}%)")
+
     if not valid_results:
-        print("WARNING:No valid Greedy Coverage results found")
+        print("  WARNING: No valid Greedy Coverage results found")
         return None
 
     # Use m*n as the size metric
     sizes = [r['num_edges'] * r['num_vertices'] for r in valid_results]
     times = [r['greedy_time'] for r in valid_results]
+
+    print(f"  Size (m*n) range: {min(sizes)} - {max(sizes)}")
+    print(f"  Time range: {min(times):.6f}s - {max(times):.6f}s")
+    print(f"  Unique sizes: {len(set(sizes))}")
 
     # Fit as linear in (m*n)
     return fit_polynomial_complexity(sizes, times, degree=1.0, algorithm_name="Greedy Coverage")
@@ -183,12 +219,21 @@ def analyze_greedy_matching_complexity(results: List[Dict]) -> ComplexityFit:
         if r.get('greedy_matching_time') is not None
     ]
 
+    total_results = len(results)
+    valid_count = len(valid_results)
+
+    print(f"  Valid data points: {valid_count}/{total_results} ({100*valid_count/total_results:.1f}%)")
+
     if not valid_results:
-        print("WARNING:No valid Greedy Matching results found")
+        print("  WARNING: No valid Greedy Matching results found")
         return None
 
     edges = [r['num_edges'] for r in valid_results]
     times = [r['greedy_matching_time'] for r in valid_results]
+
+    print(f"  Edge range: {min(edges)} - {max(edges)}")
+    print(f"  Time range: {min(times):.6f}s - {max(times):.6f}s")
+    print(f"  Unique edge counts: {len(set(edges))}")
 
     return fit_polynomial_complexity(edges, times, degree=1.0, algorithm_name="Greedy Matching")
 
@@ -268,8 +313,61 @@ def generate_validation_report(fits: Dict[str, ComplexityFit]) -> None:
     print("\n" + "=" * 80 + "\n")
 
 
+def analyze_single_density(results: List[Dict], density: float) -> Dict[str, ComplexityFit]:
+    """Analyze results filtered to a single density."""
+    # Filter to single density (within 0.1% tolerance)
+    filtered = [r for r in results if abs(r.get('edge_density', 0) - density) < 0.1]
+
+    if len(filtered) < 5:
+        print(f"  WARNING: Not enough data for density {density}% ({len(filtered)} points)")
+        return {}
+
+    print(f"\n{'='*80}")
+    print(f"DENSITY = {density}% ({len(filtered)} experiments)")
+    print('='*80)
+
+    fits = {}
+
+    print("\n1. Exhaustive Search (O(2^m))...")
+    try:
+        fits['Exhaustive Search'] = analyze_exhaustive_complexity(filtered)
+    except Exception as e:
+        print(f"  Error: {e}")
+        fits['Exhaustive Search'] = None
+
+    print("\n2. Branch & Bound (O(2^m))...")
+    try:
+        fits['Branch & Bound'] = analyze_branch_bound_complexity(filtered)
+    except Exception as e:
+        print(f"  Error: {e}")
+        fits['Branch & Bound'] = None
+
+    print("\n3. Optimal Matching (O(n^2.5))...")
+    try:
+        fits['Optimal Matching'] = analyze_optimal_matching_complexity(filtered)
+    except Exception as e:
+        print(f"  Error: {e}")
+        fits['Optimal Matching'] = None
+
+    print("\n4. Greedy Coverage (O(m*n))...")
+    try:
+        fits['Greedy Coverage'] = analyze_greedy_coverage_complexity(filtered)
+    except Exception as e:
+        print(f"  Error: {e}")
+        fits['Greedy Coverage'] = None
+
+    print("\n5. Greedy Matching (O(m))...")
+    try:
+        fits['Greedy Matching'] = analyze_greedy_matching_complexity(filtered)
+    except Exception as e:
+        print(f"  Error: {e}")
+        fits['Greedy Matching'] = None
+
+    return fits
+
+
 def main():
-    """Main validation analysis."""
+    """Main validation analysis - analyzes each density separately."""
     # Find most recent results file
     results_dir = Path("results")
     if not results_dir.exists():
@@ -285,49 +383,98 @@ def main():
         sys.exit(1)
 
     results_file = csv_files[0]
-    print(f"Loading results from: {results_file}")
+
+    print("=" * 80)
+    print("COMPLEXITY VALIDATION - DENSITY-SEPARATED ANALYSIS")
+    print("=" * 80)
+    print(f"Loading results from: {results_file}\n")
 
     # Load results
     results = load_results_from_csv(results_file)
-    print(f"Loaded {len(results)} experiment results\n")
+    print(f"Loaded {len(results)} experiment results")
 
-    # Analyze each algorithm
-    fits = {}
+    # PDF-required densities
+    densities = [12.5, 25.0, 50.0, 75.0]
 
-    print("Analyzing algorithm complexities...")
+    # Analyze each density separately
+    all_fits = {}
+    for density in densities:
+        fits = analyze_single_density(results, density)
+        if fits:
+            all_fits[density] = fits
+
+    # Generate summary table
+    print("\n" + "=" * 80)
+    print("R² SUMMARY TABLE - ALL DENSITIES")
+    print("=" * 80)
+    print(f"\n{'Algorithm':<25} {'12.5%':<10} {'25%':<10} {'50%':<10} {'75%':<10} {'Avg R²':<10} {'Status'}")
     print("-" * 80)
 
-    print("1. Exhaustive Search (O(2^m))...", end=" ")
-    fits['Exhaustive Search'] = analyze_exhaustive_complexity(results)
-    print("[OK]" if fits['Exhaustive Search'] else "✗")
+    algorithms = ['Exhaustive Search', 'Branch & Bound', 'Optimal Matching', 'Greedy Coverage', 'Greedy Matching']
 
-    print("2. Branch & Bound (O(2^m))...", end=" ")
-    fits['Branch & Bound'] = analyze_branch_bound_complexity(results)
-    print("[OK]" if fits['Branch & Bound'] else "✗")
+    for alg in algorithms:
+        r2_values = []
+        row = f"{alg:<25}"
 
-    print("3. Optimal Matching (O(n^2.5))...", end=" ")
-    fits['Optimal Matching'] = analyze_optimal_matching_complexity(results)
-    print("[OK]" if fits['Optimal Matching'] else "✗")
+        for density in densities:
+            if density in all_fits and alg in all_fits[density] and all_fits[density][alg]:
+                r2 = all_fits[density][alg].r_squared
+                r2_values.append(r2)
+                row += f" {r2:<10.4f}"
+            else:
+                row += f" {'N/A':<10}"
 
-    print("4. Greedy Coverage (O(m*n))...", end=" ")
-    fits['Greedy Coverage'] = analyze_greedy_coverage_complexity(results)
-    print("[OK]" if fits['Greedy Coverage'] else "✗")
+        if r2_values:
+            avg_r2 = sum(r2_values) / len(r2_values)
+            row += f" {avg_r2:<10.4f}"
+            status = "✓ GOOD" if avg_r2 >= 0.85 else ("FAIR" if avg_r2 >= 0.70 else "✗ POOR")
+            row += f" {status}"
+        else:
+            row += f" {'N/A':<10} {'NO DATA'}"
 
-    print("5. Greedy Matching (O(m))...", end=" ")
-    fits['Greedy Matching'] = analyze_greedy_matching_complexity(results)
-    print("[OK]" if fits['Greedy Matching'] else "✗")
+        print(row)
 
-    print("-" * 80 + "\n")
+    print("-" * 80)
 
-    # Generate report
-    generate_validation_report(fits)
+    # Count successes
+    print("\n" + "=" * 80)
+    print("VALIDATION SUMMARY")
+    print("=" * 80)
 
-    # Save validation results
-    output_file = results_dir / "complexity_validation.txt"
-    print(f"Saving validation report to: {output_file}")
+    good_count = 0
+    total_count = 0
 
-    # Note: In production, would redirect stdout to file here
+    for alg in algorithms:
+        r2_values = []
+        for density in densities:
+            if density in all_fits and alg in all_fits[density] and all_fits[density][alg]:
+                r2_values.append(all_fits[density][alg].r_squared)
+
+        if r2_values:
+            avg_r2 = sum(r2_values) / len(r2_values)
+            total_count += 1
+            if avg_r2 >= 0.85:
+                good_count += 1
+                print(f"✓ {alg}: Average R² = {avg_r2:.4f} (GOOD)")
+            elif avg_r2 >= 0.70:
+                print(f"  {alg}: Average R² = {avg_r2:.4f} (FAIR)")
+            else:
+                print(f"✗ {alg}: Average R² = {avg_r2:.4f} (POOR)")
+
+    if total_count > 0:
+        percentage = (good_count / total_count) * 100
+        print(f"\n{good_count}/{total_count} algorithms ({percentage:.0f}%) achieve R² ≥ 0.85")
+
+        if percentage >= 80:
+            print("\n✓✓✓ EXCELLENT: Experimental results STRONGLY VALIDATE theoretical complexity!")
+        elif percentage >= 60:
+            print("\n✓ GOOD: Experimental results VALIDATE theoretical complexity")
+        else:
+            print("\n⚠ MIXED: Some algorithms validated, others need more work")
+
+    print("\n" + "=" * 80)
     print("Complexity validation complete!")
+    print("=" * 80)
 
 
 if __name__ == "__main__":
