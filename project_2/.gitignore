@@ -1,2 +1,63 @@
-SW_ALGUNS_GRAFOS/
-Links_to_Graph_Repositories.pdf
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Data and Results
+data/
+results/
+overnight/
+figures/
+
+# Keep directory structure
+!data/.gitkeep
+!results/.gitkeep
+!overnight/.gitkeep
+!figures/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Checkpoints
+*.pkl
+*.checkpoint
