@@ -61,23 +61,57 @@ def israeli_itai_edge_cover(G: nx.Graph, max_rounds: int = None, seed: int = Non
     if max_rounds is None:
         max_rounds = 10 * (n.bit_length())  # 10 * log2(n)
 
-    # TODO: Implement Israeli-Itai algorithm
-    # 1. Initialize unmatched vertices set
-    # 2. Phase 1: Randomized matching rounds
-    #    - Each unmatched vertex proposes to random neighbor
-    #    - Handle proposals and acceptances
-    #    - Update matching and unmatched sets
-    # 3. Phase 2: Greedy extension for remaining vertices
-    # 4. Return edge cover with detailed metrics
+    # Step 1: Initialize
+    matching_edges = set()
+    matched_vertices = set()
+    unmatched_vertices = set(G.nodes())
+
+    # Phase 1: Randomized matching rounds
+    rounds_completed = 0
+    for round_num in range(max_rounds):
+        if not unmatched_vertices:
+            break  # All vertices matched
+
+        # Execute one propose-accept round
+        new_edges = _propose_accept_round(G, unmatched_vertices)
+
+        if not new_edges:
+            break  # No new matches possible
+
+        # Add new edges to matching
+        for edge in new_edges:
+            matching_edges.add(edge)
+            u, v = edge
+            matched_vertices.add(u)
+            matched_vertices.add(v)
+            unmatched_vertices.discard(u)
+            unmatched_vertices.discard(v)
+
+        rounds_completed += 1
+
+    # Phase 2: Greedy extension for remaining unmatched vertices
+    edge_cover = matching_edges.copy()
+
+    for v in unmatched_vertices:
+        # Add arbitrary incident edge
+        neighbors = list(G.neighbors(v))
+        if not neighbors:
+            raise ValueError(f"Vertex {v} has no neighbors (isolated)")
+
+        # Choose first neighbor
+        neighbor = neighbors[0]
+        edge = (min(v, neighbor), max(v, neighbor))
+        edge_cover.add(edge)
 
     metrics = {
         'runtime': time.time() - start_time,
-        'cover_size': 0,
-        'rounds': 0,
-        'matching_size': 0
+        'cover_size': len(edge_cover),
+        'rounds': rounds_completed,
+        'matching_size': len(matching_edges),
+        'unmatched_after_matching': len(unmatched_vertices)
     }
 
-    return set(), metrics
+    return edge_cover, metrics
 
 
 def _propose_accept_round(G: nx.Graph, unmatched: Set[int]) -> Set[Tuple[int, int]]:
@@ -91,9 +125,36 @@ def _propose_accept_round(G: nx.Graph, unmatched: Set[int]) -> Set[Tuple[int, in
     Returns:
         Set of newly matched edges in this round
     """
-    # TODO: Implement single round logic
-    proposals = {}  # vertex -> proposed_neighbor
-    # 1. Each unmatched vertex proposes to random neighbor
-    # 2. Each vertex with proposals randomly accepts one
-    # 3. Return accepted proposals as edges
-    return set()
+    # Step 1: Each unmatched vertex proposes to a random neighbor
+    proposals = {}  # proposer -> proposed_neighbor
+    proposals_received = {}  # receiver -> list of proposers
+
+    for v in unmatched:
+        # Get neighbors of v
+        neighbors = list(G.neighbors(v))
+        if not neighbors:
+            continue
+
+        # Randomly select a neighbor to propose to
+        proposed_neighbor = random.choice(neighbors)
+
+        # Record proposal
+        proposals[v] = proposed_neighbor
+
+        # Track who received this proposal
+        if proposed_neighbor not in proposals_received:
+            proposals_received[proposed_neighbor] = []
+        proposals_received[proposed_neighbor].append(v)
+
+    # Step 2: Each vertex that received proposals randomly accepts one
+    matched_edges = set()
+
+    for receiver, proposers in proposals_received.items():
+        # Randomly accept one proposal
+        accepted_proposer = random.choice(proposers)
+
+        # Create edge (normalize representation)
+        edge = (min(receiver, accepted_proposer), max(receiver, accepted_proposer))
+        matched_edges.add(edge)
+
+    return matched_edges

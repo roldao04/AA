@@ -54,16 +54,40 @@ def nearest_neighbor_edge_cover(G: nx.Graph, seed: int = None) -> Tuple[Set[Tupl
     if any(G.degree(v) == 0 for v in G.nodes()):
         raise ValueError("Graph contains isolated vertices")
 
-    # TODO: Implement nearest neighbor algorithm
-    # 1. Initialize covered vertices set
-    # 2. Iterate through vertices (random or fixed order)
-    # 3. For each uncovered vertex, select incident edge
-    # 4. Mark both endpoints as covered
-    # 5. Return edge cover with metrics
+    # Step 1: Initialize
+    edge_cover = set()
+    covered_vertices = set()
+
+    # Step 2: Get vertex order (randomize if seed provided, otherwise use default)
+    vertices = list(G.nodes())
+    if seed is not None:
+        random.shuffle(vertices)
+
+    # Step 3: Iterate through vertices
+    for v in vertices:
+        # Skip if already covered
+        if v in covered_vertices:
+            continue
+
+        # Step 4: Select an arbitrary incident edge
+        neighbors = list(G.neighbors(v))
+        if not neighbors:
+            raise ValueError(f"Vertex {v} has no neighbors (isolated)")
+
+        # Choose first neighbor (or could choose randomly, min degree, etc.)
+        neighbor = neighbors[0]
+
+        # Add edge to cover (normalize edge representation)
+        edge = (min(v, neighbor), max(v, neighbor))
+        edge_cover.add(edge)
+
+        # Step 5: Mark both endpoints as covered
+        covered_vertices.add(v)
+        covered_vertices.add(neighbor)
 
     metrics = {
         'runtime': time.time() - start_time,
-        'cover_size': 0
+        'cover_size': len(edge_cover)
     }
 
-    return set(), metrics
+    return edge_cover, metrics

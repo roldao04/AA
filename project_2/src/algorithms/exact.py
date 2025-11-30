@@ -39,24 +39,71 @@ def exact_edge_cover(G: nx.Graph, timeout: int = 300) -> Tuple[Set[Tuple[int, in
         Gallai, T. (1959). "Über extreme Punkt-und Kantenmengen"
     """
     start_time = time.time()
+    operations = 0
 
     # Check for isolated vertices
     if any(G.degree(v) == 0 for v in G.nodes()):
         raise ValueError("Graph contains isolated vertices")
 
-    # TODO: Implement exact algorithm
-    # 1. Compute maximum matching using nx.max_weight_matching()
-    # 2. Identify unmatched vertices
-    # 3. Add incident edges for unmatched vertices
-    # 4. Return edge cover with metrics
+    # Step 1: Compute maximum matching using NetworkX
+    # For unweighted graphs, max_weight_matching with maxcardinality=True gives max matching
+    try:
+        matching_dict = nx.max_weight_matching(G, maxcardinality=True)
+        operations += 1
+
+        # Convert matching dict to set of edges
+        matching_edges = set()
+        matched_vertices = set()
+
+        for u, v in matching_dict:
+            # Normalize edge representation (smaller vertex first)
+            edge = (min(u, v), max(u, v))
+            matching_edges.add(edge)
+            matched_vertices.add(u)
+            matched_vertices.add(v)
+            operations += 1
+    except Exception as e:
+        # If timeout or other error during matching
+        if time.time() - start_time > timeout:
+            raise TimeoutError(f"Matching computation exceeded timeout of {timeout}s")
+        raise e
+
+    # Step 2: Find unmatched vertices
+    all_vertices = set(G.nodes())
+    unmatched_vertices = all_vertices - matched_vertices
+    operations += 1
+
+    # Step 3: For each unmatched vertex, add an arbitrary incident edge
+    edge_cover = matching_edges.copy()
+
+    for v in unmatched_vertices:
+        # Get any neighbor of v
+        neighbors = list(G.neighbors(v))
+        if not neighbors:
+            raise ValueError(f"Vertex {v} has no neighbors (isolated)")
+
+        # Add edge to first neighbor (arbitrary choice)
+        neighbor = neighbors[0]
+        edge = (min(v, neighbor), max(v, neighbor))
+        edge_cover.add(edge)
+        operations += 1
+
+    # Check timeout
+    if time.time() - start_time > timeout:
+        raise TimeoutError(f"Edge cover computation exceeded timeout of {timeout}s")
+
+    # Verify result is valid (optional, but good for debugging)
+    assert verify_edge_cover(G, edge_cover), "Generated edge cover is invalid"
 
     metrics = {
         'runtime': time.time() - start_time,
-        'cover_size': 0,
-        'operations': 0
+        'cover_size': len(edge_cover),
+        'operations': operations,
+        'matching_size': len(matching_edges),
+        'unmatched_vertices': len(unmatched_vertices)
     }
 
-    return set(), metrics
+    return edge_cover, metrics
 
 
 def verify_edge_cover(G: nx.Graph, edge_cover: Set[Tuple[int, int]]) -> bool:

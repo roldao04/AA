@@ -59,23 +59,65 @@ def lazy_greedy_edge_cover(G: nx.Graph, randomize_ties: bool = False, seed: int 
     if any(G.degree(v) == 0 for v in G.nodes()):
         raise ValueError("Graph contains isolated vertices")
 
-    # TODO: Implement lazy greedy algorithm
-    # 1. Initialize uncovered vertices set
-    # 2. Create priority queue with edges (priority = uncovered endpoints)
-    # 3. Main loop:
-    #    - Pop edge with highest priority
-    #    - Check if priority is still valid (lazy evaluation)
-    #    - If valid and covers uncovered vertices, add to cover
-    #    - If priority changed, recompute and re-insert
-    # 4. Return cover with metrics
+    # Step 1: Initialize uncovered vertices
+    uncovered = set(G.nodes())
+    edge_cover = set()
+
+    # Step 2: Create priority queue with all edges
+    # Use negative priority for max-heap (heapq is min-heap by default)
+    # Priority: number of uncovered endpoints (2, 1, or 0)
+    # Heap entries: (-priority, tie_breaker, edge)
+    pq = []
+    tie_breaker = 0
+
+    for u, v in G.edges():
+        edge = (min(u, v), max(u, v))
+        priority = _count_uncovered_endpoints(edge, uncovered)
+        heapq.heappush(pq, (-priority, tie_breaker, edge))
+        tie_breaker += 1
+        operations += 1
+
+    # Step 3: Main greedy loop
+    while uncovered and pq:
+        # Pop edge with highest priority
+        neg_priority, _, edge = heapq.heappop(pq)
+        old_priority = -neg_priority
+        operations += 1
+
+        # Lazy evaluation: check if priority is still valid
+        current_priority = _count_uncovered_endpoints(edge, uncovered)
+
+        if current_priority == 0:
+            # Both endpoints already covered, skip this edge
+            continue
+
+        if current_priority != old_priority:
+            # Priority changed, re-insert with updated priority
+            heapq.heappush(pq, (-current_priority, tie_breaker, edge))
+            tie_breaker += 1
+            operations += 1
+            continue
+
+        # Priority is still valid, add edge to cover
+        edge_cover.add(edge)
+        u, v = edge
+
+        # Update uncovered vertices
+        uncovered.discard(u)
+        uncovered.discard(v)
+        operations += 1
+
+    # Verify all vertices are covered
+    if uncovered:
+        raise RuntimeError(f"Algorithm failed: {len(uncovered)} vertices still uncovered")
 
     metrics = {
         'runtime': time.time() - start_time,
-        'cover_size': 0,
+        'cover_size': len(edge_cover),
         'operations': operations
     }
 
-    return set(), metrics
+    return edge_cover, metrics
 
 
 def _count_uncovered_endpoints(edge: Tuple[int, int], uncovered: Set[int]) -> int:

@@ -185,3 +185,85 @@ def load_custom_graph(filepath: str, format: str = 'edgelist') -> nx.Graph:
         G.remove_nodes_from(isolated)
 
     return G
+
+
+def load_sw_graph(filename: str, data_dir: str = 'data/SW_ALGUNS_GRAFOS') -> nx.Graph:
+    """
+    Load graph from Sedgewick & Wayne format file.
+
+    Format (as per README.txt):
+    - Line 1: 0/1 if directed
+    - Line 2: 0/1 if weighted
+    - Line 3: number of vertices
+    - Line 4: number of edges
+    - Remaining lines: vertex_from vertex_to [weight]
+
+    Args:
+        filename: Name of SW graph file (e.g., 'SWtinyG.txt')
+        data_dir: Directory containing SW graph files
+
+    Returns:
+        NetworkX Graph object (undirected, unweighted)
+
+    Notes:
+        - Self-loops (lacetes) are automatically removed
+        - Directed graphs are converted to undirected
+        - Edge weights are ignored for edge cover problem
+        - Isolated vertices are removed
+    """
+    filepath = Path(data_dir) / filename
+
+    if not filepath.exists():
+        raise FileNotFoundError(f"SW graph file not found: {filepath}")
+
+    with open(filepath, 'r') as f:
+        lines = f.readlines()
+
+    # Parse header
+    is_directed = int(lines[0].strip()) == 1
+    is_weighted = int(lines[1].strip()) == 1
+    n_vertices = int(lines[2].strip())
+    n_edges = int(lines[3].strip())
+
+    # Create graph (always convert to undirected for edge cover)
+    G = nx.Graph()
+    G.add_nodes_from(range(n_vertices))
+
+    # Read edges
+    edges_added = 0
+    self_loops_skipped = 0
+
+    for i in range(4, len(lines)):
+        line = lines[i].strip()
+        if not line:
+            continue
+
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+
+        u = int(parts[0])
+        v = int(parts[1])
+
+        # Skip self-loops (lacetes) as per README
+        if u == v:
+            self_loops_skipped += 1
+            continue
+
+        # Add edge (ignore weight if present)
+        if not G.has_edge(u, v):
+            G.add_edge(u, v)
+            edges_added += 1
+
+    # Remove isolated vertices
+    isolated = list(nx.isolates(G))
+    if isolated:
+        print(f"Warning [{filename}]: Removing {len(isolated)} isolated vertices")
+        G.remove_nodes_from(isolated)
+
+    if self_loops_skipped > 0:
+        print(f"Info [{filename}]: Skipped {self_loops_skipped} self-loops")
+
+    print(f"Loaded {filename}: {G.number_of_nodes()} vertices, {G.number_of_edges()} edges")
+
+    return G
