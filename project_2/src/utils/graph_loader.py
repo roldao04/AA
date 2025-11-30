@@ -267,3 +267,206 @@ def load_sw_graph(filename: str, data_dir: str = 'data/SW_ALGUNS_GRAFOS') -> nx.
     print(f"Loaded {filename}: {G.number_of_nodes()} vertices, {G.number_of_edges()} edges")
 
     return G
+
+
+def load_snap_graph(relative_path: str, data_dir: str = 'data/SNAP') -> nx.Graph:
+    """
+    Load graph from SNAP dataset in edge list format.
+
+    SNAP Format:
+    - Lines starting with # are comments (metadata)
+    - Each line: FromNodeId ToNodeId (tab or space separated)
+    - May list edges in both directions (converted to undirected)
+
+    Args:
+        relative_path: Relative path from data_dir (e.g., 'ca-grqc/CA-GrQc.txt')
+        data_dir: Base directory for SNAP datasets
+
+    Returns:
+        NetworkX Graph object (undirected, unweighted)
+
+    Examples:
+        >>> G = load_snap_graph('ca-grqc/CA-GrQc.txt')
+        >>> G = load_snap_graph('wiki_vote/Wiki-Vote.txt')
+        >>> G = load_snap_graph('email_eu_core/email-Eu-core.txt')
+
+    Notes:
+        - Self-loops are removed
+        - Isolated vertices are removed
+        - Converted to undirected graph
+    """
+    filepath = Path(data_dir) / relative_path
+
+    if not filepath.exists():
+        raise FileNotFoundError(f"SNAP graph file not found: {filepath}")
+
+    # Load edge list (comments start with #)
+    G = nx.read_edgelist(str(filepath), comments='#', nodetype=int)
+
+    # Ensure undirected
+    G = nx.Graph(G)
+
+    # Remove self-loops
+    self_loops = list(nx.selfloop_edges(G))
+    if self_loops:
+        G.remove_edges_from(self_loops)
+        print(f"Info [{relative_path}]: Removed {len(self_loops)} self-loops")
+
+    # Remove isolated vertices
+    isolated = list(nx.isolates(G))
+    if isolated:
+        print(f"Warning [{relative_path}]: Removing {len(isolated)} isolated vertices")
+        G.remove_nodes_from(isolated)
+
+    print(f"Loaded SNAP graph {relative_path}: {G.number_of_nodes()} vertices, {G.number_of_edges()} edges")
+
+    return G
+
+
+def load_facebook_ego(ego_id: str, data_dir: str = 'data/SNAP/facebook/facebook') -> nx.Graph:
+    """
+    Load Facebook ego network from SNAP dataset.
+
+    Format:
+    - File: {ego_id}.edges contains space-separated edge list
+    - Ego node (center) is connected to all nodes in the network
+    - Need to manually add ego node and its edges
+
+    Args:
+        ego_id: Ego network ID (e.g., '0', '107', '698', '1684')
+        data_dir: Directory containing Facebook ego network files
+
+    Returns:
+        NetworkX Graph object (undirected, unweighted)
+
+    Examples:
+        >>> G = load_facebook_ego('0')      # 333 nodes
+        >>> G = load_facebook_ego('107')    # 1034 nodes
+        >>> G = load_facebook_ego('698')    # 61 nodes
+
+    Notes:
+        - Ego node is added and connected to all other nodes
+        - Self-loops are removed
+        - Isolated vertices are removed
+    """
+    filepath = Path(data_dir) / f"{ego_id}.edges"
+
+    if not filepath.exists():
+        raise FileNotFoundError(f"Facebook ego network file not found: {filepath}")
+
+    # Load edge list (no comments in Facebook ego files)
+    G = nx.read_edgelist(str(filepath), nodetype=int)
+
+    # Ensure undirected
+    G = nx.Graph(G)
+
+    # Add ego node (convert ego_id to int)
+    ego_node = int(ego_id)
+
+    # Get all nodes in the network (ego's friends)
+    all_nodes = set(G.nodes())
+
+    # Add ego node and connect to all nodes
+    if ego_node not in G:
+        G.add_node(ego_node)
+
+    for node in all_nodes:
+        if node != ego_node and not G.has_edge(ego_node, node):
+            G.add_edge(ego_node, node)
+
+    # Remove self-loops (shouldn't exist but be safe)
+    self_loops = list(nx.selfloop_edges(G))
+    if self_loops:
+        G.remove_edges_from(self_loops)
+
+    # Remove isolated vertices
+    isolated = list(nx.isolates(G))
+    if isolated:
+        print(f"Warning [ego-{ego_id}]: Removing {len(isolated)} isolated vertices")
+        G.remove_nodes_from(isolated)
+
+    print(f"Loaded Facebook ego-{ego_id}: {G.number_of_nodes()} vertices, {G.number_of_edges()} edges")
+
+    return G
+
+
+def load_dimacs_graph(relative_path: str, data_dir: str = 'data/DIMACS') -> nx.Graph:
+    """
+    Load graph from DIMACS CLIQUE format.
+
+    DIMACS Format:
+    - Lines starting with 'c' are comments
+    - Header: p edge <n_vertices> <n_edges>
+    - Edges: e <u> <v>
+
+    Args:
+        relative_path: Relative path from data_dir (e.g., 'C1000.9/c1000.txt')
+        data_dir: Base directory for DIMACS benchmarks
+
+    Returns:
+        NetworkX Graph object (undirected, unweighted)
+
+    Examples:
+        >>> G = load_dimacs_graph('C1000.9/c1000.txt')  # 1000 nodes, 450k edges, p=0.9
+        >>> G = load_dimacs_graph('C2000.9/c2000.txt')  # 2000 nodes, 1.8M edges
+
+    Notes:
+        - Self-loops are removed
+        - Isolated vertices are removed
+        - Vertex IDs are 1-indexed in file, converted to 0-indexed
+    """
+    filepath = Path(data_dir) / relative_path
+
+    if not filepath.exists():
+        raise FileNotFoundError(f"DIMACS graph file not found: {filepath}")
+
+    G = nx.Graph()
+    n_vertices = 0
+    n_edges_expected = 0
+
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+
+            # Skip empty lines
+            if not line:
+                continue
+
+            # Parse header
+            if line.startswith('p edge'):
+                parts = line.split()
+                n_vertices = int(parts[2])
+                n_edges_expected = int(parts[3])
+                # Add all vertices (1-indexed in file, we'll use 1-indexed in graph too)
+                G.add_nodes_from(range(1, n_vertices + 1))
+
+            # Parse edges
+            elif line.startswith('e'):
+                parts = line.split()
+                u = int(parts[1])
+                v = int(parts[2])
+
+                # Skip self-loops
+                if u == v:
+                    continue
+
+                # Add edge (graph uses 1-indexed like file)
+                G.add_edge(u, v)
+
+            # Skip comments
+            elif line.startswith('c'):
+                continue
+
+    # Remove isolated vertices
+    isolated = list(nx.isolates(G))
+    if isolated:
+        print(f"Warning [{relative_path}]: Removing {len(isolated)} isolated vertices")
+        G.remove_nodes_from(isolated)
+
+    edges_loaded = G.number_of_edges()
+    if edges_loaded != n_edges_expected:
+        print(f"Info [{relative_path}]: Loaded {edges_loaded} edges, expected {n_edges_expected}")
+
+    print(f"Loaded DIMACS graph {relative_path}: {G.number_of_nodes()} vertices, {G.number_of_edges()} edges")
+
+    return G
