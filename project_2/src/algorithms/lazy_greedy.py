@@ -15,7 +15,7 @@ from typing import Set, Tuple, List
 import time
 
 
-def lazy_greedy_edge_cover(G: nx.Graph, randomize_ties: bool = False, seed: int = None) -> Tuple[Set[Tuple[int, int]], dict]:
+def lazy_greedy_edge_cover(G: nx.Graph, randomize_ties: bool = False, seed: int = None, timeout: int = 300) -> Tuple[Set[Tuple[int, int]], dict]:
     """
     Compute edge cover using lazy greedy algorithm with 3/2-approximation guarantee.
 
@@ -31,6 +31,7 @@ def lazy_greedy_edge_cover(G: nx.Graph, randomize_ties: bool = False, seed: int 
         G: NetworkX graph (must have no isolated vertices)
         randomize_ties: Use random tie-breaking for edges with equal priority
         seed: Random seed for reproducibility
+        timeout: Maximum time allowed in seconds (default: 300)
 
     Returns:
         Tuple of (edge_cover_set, metrics_dict)

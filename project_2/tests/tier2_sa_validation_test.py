@@ -9,6 +9,47 @@ from src.algorithms.israeli_itai import israeli_itai_edge_cover
 from src.algorithms.simulated_annealing import simulated_annealing_edge_cover
 import time
 import pandas as pd
+import signal
+from contextlib import contextmanager
+from pathlib import Path
+
+
+# Timeout mechanism for SA test
+class TimeoutException(Exception):
+    """Exception raised when algorithm exceeds timeout"""
+    pass
+
+
+@contextmanager
+def timeout(seconds):
+    """Context manager for timing out long-running operations"""
+    def signal_handler(signum, frame):
+        raise TimeoutException(f"Operation timed out after {seconds} seconds")
+
+    old_handler = signal.signal(signal.SIGALRM, signal_handler)
+    signal.alarm(seconds)
+
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
+
+
+# Create results directory
+Path('results').mkdir(exist_ok=True)
+output_file = 'results/tier2_sa_validation_results.csv'
+
+# SA timeout configuration
+SA_TIMEOUT = 300  # 5 minutes = decision threshold
+
+
+def save_intermediate_results(results):
+    """Save results to CSV after each algorithm completes"""
+    df = pd.DataFrame(results)
+    df.to_csv(output_file, index=False)
+    print(f"  💾 Intermediate results saved ({len(results)} tests)")
+    return df
 
 print("="*70)
 print("TIER 2: SA VALIDATION ON BIGGER GRAPHS")
@@ -60,6 +101,10 @@ try:
                 'runtime': elapsed,
                 'success': False
             })
+
+        # Save after each algorithm
+        save_intermediate_results(results)
+
 except Exception as e:
     print(f"❌ Failed to load ego-1912: {e}")
 
@@ -103,6 +148,10 @@ try:
                 'runtime': elapsed,
                 'success': False
             })
+
+        # Save after each algorithm
+        save_intermediate_results(results)
+
 except Exception as e:
     print(f"❌ Failed to load ego-107: {e}")
 
@@ -152,18 +201,23 @@ try:
                 'success': False
             })
 
+        # Save after each fast algorithm
+        save_intermediate_results(results)
+
     # Now the critical SA test
     print("\n  " + "="*66)
     print("  SIMULATED ANNEALING TEST - DECISION POINT")
     print("  " + "="*66)
-    print("  Running simulated_annealing (this may take 1-5 minutes)...", flush=True)
-    print("  If completes in <5 min → INCLUDE SA in overnight")
-    print("  If >5 min or fails → EXCLUDE SA from overnight")
+    print(f"  Running simulated_annealing with {SA_TIMEOUT}s timeout...", flush=True)
+    print(f"  If completes in <{SA_TIMEOUT}s → INCLUDE SA in overnight")
+    print(f"  If >{SA_TIMEOUT}s or fails → EXCLUDE SA from overnight")
     print()
 
     start = time.time()
     try:
-        sa_cover, sa_metrics = simulated_annealing_edge_cover(G, initial_solution='lazy_greedy')
+        # Wrap SA with timeout
+        with timeout(SA_TIMEOUT):
+            sa_cover, sa_metrics = simulated_annealing_edge_cover(G, initial_solution='lazy_greedy')
         elapsed = time.time() - start
 
         print(f"  ✅ SA COMPLETED: {sa_metrics['cover_size']} edges in {elapsed:.2f}s")
@@ -177,18 +231,45 @@ try:
             'success': True
         })
 
+        # Save after SA success
+        save_intermediate_results(results)
+
         print("\n  " + "="*66)
-        if elapsed < 300:  # 5 minutes
+        if elapsed < SA_TIMEOUT:
             print("  ✅✅✅ DECISION: INCLUDE SA IN OVERNIGHT EXPERIMENTS ✅✅✅")
-            print(f"  Rationale: SA completed C2000.9 in {elapsed:.2f}s < 300s threshold")
+            print(f"  Rationale: SA completed C2000.9 in {elapsed:.2f}s < {SA_TIMEOUT}s threshold")
             print("  SA will be enabled for small/medium graphs in overnight run")
             sa_decision = "INCLUDE"
         else:
             print("  ⚠️⚠️⚠️ DECISION: EXCLUDE SA FROM OVERNIGHT EXPERIMENTS ⚠️⚠️⚠️")
-            print(f"  Rationale: SA completed in {elapsed:.2f}s > 300s threshold")
+            print(f"  Rationale: SA completed in {elapsed:.2f}s ≈ {SA_TIMEOUT}s threshold")
             print("  SA deemed too slow for production use on larger graphs")
             sa_decision = "EXCLUDE"
         print("  " + "="*66)
+
+    except TimeoutException:
+        elapsed = time.time() - start
+        print(f"  ⏰ SA TIMEOUT after {elapsed:.2f}s (>{SA_TIMEOUT}s limit)")
+        print(f"  SA exceeded {SA_TIMEOUT/60:.1f} minute threshold")
+        results.append({
+            'graph': 'C2000.9',
+            'vertices': G.number_of_nodes(),
+            'edges': G.number_of_edges(),
+            'algorithm': 'simulated_annealing',
+            'cover_size': None,
+            'runtime': SA_TIMEOUT,
+            'success': False
+        })
+
+        # Save after SA timeout
+        save_intermediate_results(results)
+
+        print("\n  " + "="*66)
+        print("  ❌❌❌ DECISION: EXCLUDE SA FROM OVERNIGHT EXPERIMENTS ❌❌❌")
+        print(f"  Rationale: SA timeout on C2000.9 after {SA_TIMEOUT}s")
+        print("  SA deemed too slow for production use on larger graphs")
+        print("  " + "="*66)
+        sa_decision = "EXCLUDE"
 
     except Exception as e:
         elapsed = time.time() - start
@@ -203,6 +284,9 @@ try:
             'runtime': elapsed,
             'success': False
         })
+
+        # Save after SA failure
+        save_intermediate_results(results)
 
         print("\n  " + "="*66)
         print("  ❌❌❌ DECISION: EXCLUDE SA FROM OVERNIGHT EXPERIMENTS ❌❌❌")

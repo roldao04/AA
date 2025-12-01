@@ -20,7 +20,7 @@ from typing import Set, Tuple, List
 import time
 
 
-def israeli_itai_edge_cover(G: nx.Graph, max_rounds: int = None, seed: int = None, verbose: bool = False, smart_proposals: bool = True) -> Tuple[Set[Tuple[int, int]], dict]:
+def israeli_itai_edge_cover(G: nx.Graph, max_rounds: int = None, seed: int = None, verbose: bool = False, smart_proposals: bool = True, timeout: int = 300) -> Tuple[Set[Tuple[int, int]], dict]:
     """
     Compute edge cover using Israeli-Itai randomized matching with greedy extension.
 
@@ -40,6 +40,7 @@ def israeli_itai_edge_cover(G: nx.Graph, max_rounds: int = None, seed: int = Non
         seed: Random seed for reproducibility
         verbose: If True, print detailed diagnostics
         smart_proposals: If True, use improved proposal strategy (default: True)
+        timeout: Maximum time allowed in seconds (default: 300)
 
     Returns:
         Tuple of (edge_cover_set, metrics_dict)

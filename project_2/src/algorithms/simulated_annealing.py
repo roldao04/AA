@@ -26,7 +26,8 @@ def simulated_annealing_edge_cover(
     cooling_rate: float = 0.95,
     max_iterations: int = None,
     seed: int = None,
-    initial_solution: Literal['all_edges', 'lazy_greedy', 'nearest_neighbor'] = 'lazy_greedy'
+    initial_solution: Literal['all_edges', 'lazy_greedy', 'nearest_neighbor'] = 'lazy_greedy',
+    timeout: int = 300
 ) -> Tuple[Set[Tuple[int, int]], dict]:
     """
     Compute edge cover using simulated annealing optimization.
@@ -51,6 +52,7 @@ def simulated_annealing_edge_cover(
             - 'all_edges': Start with all edges (original, slow)
             - 'lazy_greedy': Start with lazy greedy solution (recommended)
             - 'nearest_neighbor': Start with nearest neighbor solution
+        timeout: Maximum time allowed in seconds (default: 300)
 
     Returns:
         Tuple of (edge_cover_set, metrics_dict)
@@ -101,10 +103,10 @@ def simulated_annealing_edge_cover(
             current_cover.add((min(u, v), max(u, v)))
     elif initial_solution == 'lazy_greedy':
         # Recommended: start with lazy greedy solution
-        current_cover, _ = lazy_greedy_edge_cover(G, seed=seed)
+        current_cover, _ = lazy_greedy_edge_cover(G, seed=seed, timeout=timeout)
     elif initial_solution == 'nearest_neighbor':
         # Alternative: start with nearest neighbor solution
-        current_cover, _ = nearest_neighbor_edge_cover(G, seed=seed)
+        current_cover, _ = nearest_neighbor_edge_cover(G, seed=seed, timeout=timeout)
     else:
         raise ValueError(f"Unknown initial_solution method: {initial_solution}")
 

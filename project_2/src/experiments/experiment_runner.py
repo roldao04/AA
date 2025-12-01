@@ -205,12 +205,13 @@ class ExperimentRunner:
 
         print(f"Results saved to {filepath}")
 
-    def save_checkpoint(self, checkpoint_file: str = None) -> None:
+    def save_checkpoint(self, checkpoint_file: str = None, data: Any = None) -> None:
         """
-        Save checkpoint of current results.
+        Save checkpoint of current results or custom data.
 
         Args:
             checkpoint_file: Checkpoint filename
+            data: Optional custom data to save. If None, saves self.results
         """
         if checkpoint_file is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -218,8 +219,11 @@ class ExperimentRunner:
 
         filepath = self.results_dir / checkpoint_file
 
+        # Save custom data if provided, otherwise save self.results
+        data_to_save = data if data is not None else self.results
+
         with open(filepath, 'wb') as f:
-            pickle.dump(self.results, f)
+            pickle.dump(data_to_save, f)
 
         print(f"Checkpoint saved to {filepath}")
 

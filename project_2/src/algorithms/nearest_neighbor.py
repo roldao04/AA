@@ -14,7 +14,7 @@ from typing import Set, Tuple
 import time
 
 
-def nearest_neighbor_edge_cover(G: nx.Graph, seed: int = None) -> Tuple[Set[Tuple[int, int]], dict]:
+def nearest_neighbor_edge_cover(G: nx.Graph, seed: int = None, timeout: int = 300) -> Tuple[Set[Tuple[int, int]], dict]:
     """
     Compute edge cover using simple nearest neighbor heuristic.
 
@@ -28,6 +28,7 @@ def nearest_neighbor_edge_cover(G: nx.Graph, seed: int = None) -> Tuple[Set[Tupl
     Args:
         G: NetworkX graph (must have no isolated vertices)
         seed: Random seed for vertex ordering
+        timeout: Maximum time allowed in seconds (default: 300)
 
     Returns:
         Tuple of (edge_cover_set, metrics_dict)
