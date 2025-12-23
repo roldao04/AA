@@ -10,5 +10,6 @@ Author: Joao Roldao (113920)
 """
 
 from .exact_counter import ExactCounter
+from .fixed_probability_counter import FixedProbabilityCounter
 
-__all__ = ['ExactCounter']
+__all__ = ['ExactCounter', 'FixedProbabilityCounter']

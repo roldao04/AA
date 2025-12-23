@@ -12,8 +12,8 @@ from pathlib import Path
 # REPRODUCIBILITY
 # ============================================================================
 
-# Random seed for all probabilistic experiments
-RANDOM_SEED = 42
+# Random seed for all probabilistic experiments (student number for reproducibility)
+RANDOM_SEED = 113920
 
 
 # ============================================================================
