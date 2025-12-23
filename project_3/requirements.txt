@@ -1,0 +1,37 @@
+# ============================================================================
+# AA Project 3 - Requirements
+# Advanced Algorithms: Approximate Counting and Frequent Items
+# Python 3.12.3
+# ============================================================================
+
+# Data manipulation & numerical computing
+pandas==2.2.0
+numpy==1.26.3
+
+# Visualization
+matplotlib==3.8.2
+seaborn==0.13.1
+
+# Statistical analysis
+scipy==1.12.0
+
+# Jupyter (minimal - for Phase 2 data exploration)
+jupyter==1.0.0
+notebook==7.0.6
+ipykernel==6.28.0
+
+# Testing
+pytest==7.4.4
+pytest-cov==4.1.0
+
+# Code quality (optional but recommended)
+black==23.12.1
+flake8==7.0.0
+
+# ============================================================================
+# Installation Instructions:
+# 1. Create virtual environment: python3 -m venv venv
+# 2. Activate: source venv/bin/activate (Linux/Mac)
+# 3. Upgrade pip: pip install --upgrade pip
+# 4. Install dependencies: pip install -r requirements.txt
+# ============================================================================

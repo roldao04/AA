@@ -1,0 +1,115 @@
+# Virtual environment
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Results (regenerable - keep directory structure)
+# Exact counter results
+results/exact/*.csv
+results/exact/*.json
+results/exact/*.pkl
+
+# Fixed probability counter results
+results/fixed_prob/*.csv
+results/fixed_prob/*.json
+results/fixed_prob/*.pkl
+
+# Space-Saving results
+results/space_saving/*.csv
+results/space_saving/*.json
+results/space_saving/*.pkl
+
+# Comparison results
+results/comparison/*.csv
+results/comparison/*.json
+results/comparison/*.pkl
+
+# All figures (regenerable)
+results/figures/**/*.png
+results/figures/**/*.pdf
+results/figures/**/*.svg
+results/figures/**/*.jpg
+results/figures/**/*.jpeg
+
+# Keep directory structure with .gitkeep files
+!results/exact/.gitkeep
+!results/fixed_prob/.gitkeep
+!results/space_saving/.gitkeep
+!results/comparison/.gitkeep
+!results/figures/exploratory/.gitkeep
+!results/figures/fixed_prob/.gitkeep
+!results/figures/space_saving/.gitkeep
+!results/figures/comparison/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.cache
+
+# Report drafts (keep final only)
+report/draft/*.pdf
+report/draft/*.docx
+report/draft/*.tex
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Profiling data
+*.prof
+*.lprof
