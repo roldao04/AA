@@ -6,6 +6,8 @@ This module centralizes all experimental parameters, file paths, and constants
 used throughout the project for reproducibility and easy parameter tuning.
 """
 
+from pathlib import Path
+
 # ============================================================================
 # REPRODUCIBILITY
 # ============================================================================
@@ -65,20 +67,24 @@ ALPHA = 0.05
 # FILE PATHS
 # ============================================================================
 
+# Project root is 2 levels up from this config file (src/utils/config.py)
+# This ensures paths work from anywhere (notebooks, scripts, tests)
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+
 # Data paths
-DATA_RAW_PATH = "data/raw/porto.csv"
-DATA_PROCESSED_PATH = "data/processed/"
+DATA_RAW_PATH = str(PROJECT_ROOT / "data/raw/porto.csv")
+DATA_PROCESSED_PATH = str(PROJECT_ROOT / "data/processed")
 
 # Results paths
-RESULTS_PATH = "results/"
-RESULTS_EXACT_PATH = "results/exact/"
-RESULTS_FIXED_PROB_PATH = "results/fixed_prob/"
-RESULTS_SPACE_SAVING_PATH = "results/space_saving/"
-RESULTS_COMPARISON_PATH = "results/comparison/"
+RESULTS_PATH = str(PROJECT_ROOT / "results")
+RESULTS_EXACT_PATH = str(PROJECT_ROOT / "results/exact")
+RESULTS_FIXED_PROB_PATH = str(PROJECT_ROOT / "results/fixed_prob")
+RESULTS_SPACE_SAVING_PATH = str(PROJECT_ROOT / "results/space_saving")
+RESULTS_COMPARISON_PATH = str(PROJECT_ROOT / "results/comparison")
 
 # Figures paths
-FIGURES_PATH = "results/figures/"
-FIGURES_EXPLORATORY_PATH = "results/figures/exploratory/"
-FIGURES_FIXED_PROB_PATH = "results/figures/fixed_prob/"
-FIGURES_SPACE_SAVING_PATH = "results/figures/space_saving/"
-FIGURES_COMPARISON_PATH = "results/figures/comparison/"
+FIGURES_PATH = str(PROJECT_ROOT / "results/figures")
+FIGURES_EXPLORATORY_PATH = str(PROJECT_ROOT / "results/figures/exploratory")
+FIGURES_FIXED_PROB_PATH = str(PROJECT_ROOT / "results/figures/fixed_prob")
+FIGURES_SPACE_SAVING_PATH = str(PROJECT_ROOT / "results/figures/space_saving")
+FIGURES_COMPARISON_PATH = str(PROJECT_ROOT / "results/figures/comparison")
