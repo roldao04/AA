@@ -34,7 +34,8 @@ NUM_TRIALS = 100
 
 # k values to test (number of counters/monitored items)
 # Tests approximation (k < 31) and exact capture (k >= 31)
-SPACE_SAVING_K_VALUES = [10, 20, 30, 40, 50]
+# Includes intermediate values (15, 25) to show smooth transition
+SPACE_SAVING_K_VALUES = [10, 15, 20, 25, 30, 40, 50]
 
 # n values for top-n queries (number of items to report)
 # Project specification requires n in {5, 10, 15, 20}
