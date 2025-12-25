@@ -17,7 +17,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.algorithms.fixed_probability_counter import FixedProbabilityCounter
+from algorithms.fixed_probability_counter import FixedProbabilityCounter
 
 
 class TestFixedProbabilityCounterBasic:

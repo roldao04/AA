@@ -15,7 +15,7 @@ Project: AA Project 3 - Approximate Counting and Frequent Items
 import pytest
 import numpy as np
 import pandas as pd
-from src.algorithms.space_saving import SpaceSaving
+from algorithms.space_saving import SpaceSaving
 
 
 class TestSpaceSavingBasic:

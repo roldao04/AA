@@ -54,6 +54,12 @@ results/comparison/*.csv
 results/comparison/*.json
 results/comparison/*.pkl
 
+# Efficiency results
+results/efficiency/*.csv
+results/efficiency/*.json
+results/efficiency/*.pkl
+results/efficiency/*.txt
+
 # All figures (regenerable)
 results/figures/**/*.png
 results/figures/**/*.pdf

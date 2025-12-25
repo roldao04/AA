@@ -15,7 +15,7 @@ import pandas as pd
 from typing import Dict, List, Tuple, Union
 from scipy import stats
 
-from ..algorithms.fixed_probability_counter import FixedProbabilityCounter
+from algorithms.fixed_probability_counter import FixedProbabilityCounter
 
 
 def run_single_trial(

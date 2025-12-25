@@ -44,7 +44,7 @@ def load_all_results(
         - 'space_saving': Space-Saving results for all k values
         - 'metadata': Loading metadata
     """
-    from ..utils.config import (
+    from utils.config import (
         RESULTS_EXACT_PATH,
         RESULTS_FIXED_PROB_PATH,
         RESULTS_SPACE_SAVING_PATH,
@@ -190,27 +190,30 @@ def create_master_comparison_table(results: Dict[str, Any]) -> pd.DataFrame:
     if 'by_k' in results['space_saving']:
         for k, ss_data in sorted(results['space_saving']['by_k'].items()):
             # Calculate metrics from monitored items
-            monitored = ss_data.get('monitored', {})
+            monitored_items = ss_data.get('monitored_items', {})
             exact_counts = results['exact']['counts_dict']
 
             # Calculate errors
             errors = []
             rel_errors = []
-            for temp_str, (count, error) in monitored.items():
+            for temp_str, item_data in monitored_items.items():
                 temp = int(temp_str) if isinstance(temp_str, str) else temp_str
+                count = item_data['count']
                 true_count = exact_counts.get(temp, 0)
                 if true_count > 0:
                     abs_error = abs(count - true_count)
                     errors.append(abs_error)
                     rel_errors.append(abs_error / true_count)
 
-            perf = results['space_saving'].get('performance', {})
-            k_perf = perf.get(f'k{k}', {})
+            # Get performance metrics directly from ss_data
+            memory_kb = ss_data.get('peak_memory_kb', 0)
+            time_sec = ss_data.get('execution_time_sec', 0)
+            time_ms = time_sec * 1000  # Convert to milliseconds
 
             table_rows.append({
                 'Algorithm': f'Space-Saving (k={k})',
-                'Memory_KB': k_perf.get('peak_memory_kb', 0),
-                'Time_ms': k_perf.get('execution_time_ms', 0),
+                'Memory_KB': memory_kb,
+                'Time_ms': time_ms,
                 'Mean_Rel_Error_%': np.mean(rel_errors) * 100 if rel_errors else 0.0,
                 'Std_Rel_Error_%': np.std(rel_errors) * 100 if rel_errors else 0.0,
                 'Max_Abs_Error': max(errors) if errors else 0,
@@ -270,7 +273,7 @@ def calculate_cross_algorithm_errors(results: Dict[str, Any]) -> pd.DataFrame:
 
     # Add Space-Saving estimates for each k
     for k, ss_data in sorted(ss_by_k.items()):
-        monitored = ss_data.get('monitored', {})
+        monitored_items = ss_data.get('monitored_items', {})
 
         # Create k-specific columns
         k_estimates = []
@@ -281,8 +284,9 @@ def calculate_cross_algorithm_errors(results: Dict[str, Any]) -> pd.DataFrame:
             temp = int(row['temperature'])
             true_count = row['true_count']
 
-            if str(temp) in monitored:
-                ss_count, ss_error = monitored[str(temp)]
+            if str(temp) in monitored_items:
+                item_data = monitored_items[str(temp)]
+                ss_count = item_data['count']
                 abs_error = abs(ss_count - true_count)
                 rel_error = abs_error / true_count if true_count > 0 else 0
             else:
@@ -347,7 +351,8 @@ def paired_comparison_test(
     ss_errors = []
     compared_temps = []
 
-    monitored_temps = set(int(t) for t in ss_data['monitored'].keys())
+    monitored_items = ss_data.get('monitored_items', {})
+    monitored_temps = set(int(t) for t in monitored_items.keys())
 
     for temp in monitored_temps:
         if temp in exact_counts:
@@ -357,7 +362,8 @@ def paired_comparison_test(
                 fp_errors.append(fp_row['absolute_error'].values[0])
 
                 # Space-Saving error
-                ss_count, _ = ss_data['monitored'][str(temp)]
+                item_data = monitored_items[str(temp)]
+                ss_count = item_data['count']
                 ss_error = abs(ss_count - exact_counts[temp])
                 ss_errors.append(ss_error)
                 compared_temps.append(temp)
@@ -489,6 +495,9 @@ def compare_memory_usage(results: Dict[str, Any]) -> pd.DataFrame:
 
     n_unique = len(results['exact']['counts_dict'])
 
+    # Validation warnings
+    warnings = []
+
     # Exact Counter
     if 'performance' in results['exact']:
         perf = results['exact']['performance']
@@ -499,29 +508,53 @@ def compare_memory_usage(results: Dict[str, Any]) -> pd.DataFrame:
             'memory_per_item_bytes': (memory_kb * 1024) / n_unique if n_unique > 0 else 0
         })
 
-    # Fixed Probability
+    # Fixed Probability - divide by 100 to get per-trial average
     if 'performance' in results['fixed_prob']:
         perf = results['fixed_prob']['performance']
-        memory_kb = perf.get('peak_memory_kb', 0)
+        memory_kb_total = perf.get('peak_memory_kb', 0)
+        num_trials = perf.get('num_trials', 100)
+        memory_kb = memory_kb_total / num_trials  # Per-trial average
         memory_data.append({
             'algorithm': 'Fixed Prob (p=0.25)',
             'peak_memory_kb': memory_kb,
             'memory_per_item_bytes': (memory_kb * 1024) / n_unique if n_unique > 0 else 0
         })
 
-    # Space-Saving for each k
+    # Space-Saving for each k - correctly parse metrics array structure
     if 'performance' in results['space_saving']:
         perf = results['space_saving']['performance']
-        for k in sorted(results['space_saving']['by_k'].keys()):
-            k_perf = perf.get(f'k{k}', {})
-            memory_kb = k_perf.get('peak_memory_kb', 0)
-            memory_data.append({
-                'algorithm': f'Space-Saving (k={k})',
-                'peak_memory_kb': memory_kb,
-                'memory_per_item_bytes': (memory_kb * 1024) / k if k > 0 else 0
-            })
+        # Check if metrics is a list (new structure)
+        if 'metrics' in perf and isinstance(perf['metrics'], list):
+            for metric in perf['metrics']:
+                k = metric.get('k')
+                memory_kb = metric.get('peak_memory_kb', 0)
+                memory_data.append({
+                    'algorithm': f'Space-Saving (k={k})',
+                    'peak_memory_kb': memory_kb,
+                    'memory_per_item_bytes': (memory_kb * 1024) / k if k > 0 else 0
+                })
+        else:
+            # Fallback to old structure
+            for k in sorted(results['space_saving']['by_k'].keys()):
+                k_perf = perf.get(f'k{k}', {})
+                memory_kb = k_perf.get('peak_memory_kb', 0)
+                memory_data.append({
+                    'algorithm': f'Space-Saving (k={k})',
+                    'peak_memory_kb': memory_kb,
+                    'memory_per_item_bytes': (memory_kb * 1024) / k if k > 0 else 0
+                })
 
-    return pd.DataFrame(memory_data)
+    df = pd.DataFrame(memory_data)
+
+    # Data validation
+    zero_memory = df[df['peak_memory_kb'] == 0]
+    if len(zero_memory) > 0:
+        print(f"⚠ WARNING: {len(zero_memory)} algorithms show 0 KB memory usage:")
+        for alg in zero_memory['algorithm'].values:
+            print(f"    - {alg}")
+        print("  This may indicate a data collection issue.")
+
+    return df
 
 
 def compare_execution_time(results: Dict[str, Any]) -> pd.DataFrame:
@@ -555,29 +588,55 @@ def compare_execution_time(results: Dict[str, Any]) -> pd.DataFrame:
             'time_per_element_us': (time_ms * 1000) / n_total if n_total > 0 else 0
         })
 
-    # Fixed Probability
+    # Fixed Probability - divide by 100 to get per-trial average
     if 'performance' in results['fixed_prob']:
         perf = results['fixed_prob']['performance']
-        time_ms = perf.get('avg_execution_time_ms', 0)
+        # Convert from total seconds to per-trial milliseconds
+        total_time_sec = perf.get('total_execution_time_sec', 0)
+        num_trials = perf.get('num_trials', 100)
+        time_ms = (total_time_sec / num_trials) * 1000 if num_trials > 0 else 0
         time_data.append({
             'algorithm': 'Fixed Prob (p=0.25)',
             'execution_time_ms': time_ms,
             'time_per_element_us': (time_ms * 1000) / n_total if n_total > 0 else 0
         })
 
-    # Space-Saving for each k
+    # Space-Saving for each k - correctly parse metrics array structure
     if 'performance' in results['space_saving']:
         perf = results['space_saving']['performance']
-        for k in sorted(results['space_saving']['by_k'].keys()):
-            k_perf = perf.get(f'k{k}', {})
-            time_ms = k_perf.get('execution_time_ms', 0)
-            time_data.append({
-                'algorithm': f'Space-Saving (k={k})',
-                'execution_time_ms': time_ms,
-                'time_per_element_us': (time_ms * 1000) / n_total if n_total > 0 else 0
-            })
+        # Check if metrics is a list (new structure)
+        if 'metrics' in perf and isinstance(perf['metrics'], list):
+            for metric in perf['metrics']:
+                k = metric.get('k')
+                time_sec = metric.get('execution_time_sec', 0)
+                time_ms = time_sec * 1000  # Convert to milliseconds
+                time_data.append({
+                    'algorithm': f'Space-Saving (k={k})',
+                    'execution_time_ms': time_ms,
+                    'time_per_element_us': (time_ms * 1000) / n_total if n_total > 0 else 0
+                })
+        else:
+            # Fallback to old structure
+            for k in sorted(results['space_saving']['by_k'].keys()):
+                k_perf = perf.get(f'k{k}', {})
+                time_ms = k_perf.get('execution_time_ms', 0)
+                time_data.append({
+                    'algorithm': f'Space-Saving (k={k})',
+                    'execution_time_ms': time_ms,
+                    'time_per_element_us': (time_ms * 1000) / n_total if n_total > 0 else 0
+                })
 
-    return pd.DataFrame(time_data)
+    df = pd.DataFrame(time_data)
+
+    # Data validation
+    zero_time = df[df['execution_time_ms'] == 0]
+    if len(zero_time) > 0:
+        print(f"⚠ WARNING: {len(zero_time)} algorithms show 0 ms execution time:")
+        for alg in zero_time['algorithm'].values:
+            print(f"    - {alg}")
+        print("  This may indicate a data collection issue.")
+
+    return df
 
 
 def identify_pareto_frontier(
@@ -617,3 +676,301 @@ def identify_pareto_frontier(
                     break
 
     return is_pareto
+
+
+def calculate_ranking_correlation(
+    results: Dict[str, Any],
+    n: int = 20
+) -> pd.DataFrame:
+    """
+    Calculate ranking correlation metrics (Kendall's tau, Spearman's rho)
+    to verify if algorithms identify items in the same relative order.
+
+    This addresses the PDF requirement: "verify whether the same most frequent /
+    less frequent items are identified, and in the same relative order"
+
+    Parameters
+    ----------
+    results : Dict[str, Any]
+        Results from load_all_results()
+    n : int, default=20
+        Number of top items to compare
+
+    Returns
+    -------
+    pd.DataFrame
+        Ranking correlation results with columns:
+        - comparison: "Algorithm1 vs Algorithm2"
+        - n_items: Number of items compared
+        - kendall_tau: Kendall's tau correlation coefficient
+        - kendall_p: p-value for Kendall's tau
+        - spearman_rho: Spearman's rank correlation coefficient
+        - spearman_p: p-value for Spearman's rho
+        - perfect_match: True if rankings are identical
+    """
+    exact_counts = results['exact']['counts_dict']
+    fp_summary = results['fixed_prob'].get('summary')
+    ss_by_k = results['space_saving'].get('by_k', {})
+
+    # Get exact ranking (ground truth)
+    exact_ranking = sorted(exact_counts.items(), key=lambda x: x[1], reverse=True)[:n]
+    exact_temps = [temp for temp, _ in exact_ranking]
+
+    correlation_results = []
+
+    # Fixed Probability vs Exact
+    if fp_summary is not None:
+        fp_ranking = fp_summary.nlargest(n, 'mean_estimate')[['temperature', 'mean_estimate']]
+        fp_temps = fp_ranking['temperature'].tolist()
+
+        # Find common temperatures
+        common_temps = [t for t in exact_temps if t in fp_temps]
+
+        if len(common_temps) >= 2:  # Need at least 2 items for correlation
+            # Get ranks for common temperatures
+            exact_ranks = [exact_temps.index(t) for t in common_temps]
+            fp_ranks = [fp_temps.index(t) for t in common_temps]
+
+            # Calculate correlations
+            kendall_tau, kendall_p = stats.kendalltau(exact_ranks, fp_ranks)
+            spearman_rho, spearman_p = stats.spearmanr(exact_ranks, fp_ranks)
+
+            correlation_results.append({
+                'comparison': 'Exact vs Fixed Prob',
+                'n_items': len(common_temps),
+                'kendall_tau': kendall_tau,
+                'kendall_p': kendall_p,
+                'spearman_rho': spearman_rho,
+                'spearman_p': spearman_p,
+                'perfect_match': (exact_ranks == fp_ranks)
+            })
+
+    # Space-Saving vs Exact for each k
+    for k, ss_data in sorted(ss_by_k.items()):
+        monitored_items = ss_data.get('monitored_items', {})
+
+        # Create ranking from Space-Saving
+        ss_ranking = sorted(
+            [(int(temp), item['count']) for temp, item in monitored_items.items()],
+            key=lambda x: x[1],
+            reverse=True
+        )[:n]
+        ss_temps = [temp for temp, _ in ss_ranking]
+
+        # Find common temperatures
+        common_temps = [t for t in exact_temps if t in ss_temps]
+
+        if len(common_temps) >= 2:
+            # Get ranks
+            exact_ranks = [exact_temps.index(t) for t in common_temps]
+            ss_ranks = [ss_temps.index(t) for t in common_temps]
+
+            # Calculate correlations
+            kendall_tau, kendall_p = stats.kendalltau(exact_ranks, ss_ranks)
+            spearman_rho, spearman_p = stats.spearmanr(exact_ranks, ss_ranks)
+
+            correlation_results.append({
+                'comparison': f'Exact vs Space-Saving k={k}',
+                'n_items': len(common_temps),
+                'kendall_tau': kendall_tau,
+                'kendall_p': kendall_p,
+                'spearman_rho': spearman_rho,
+                'spearman_p': spearman_p,
+                'perfect_match': (exact_ranks == ss_ranks)
+            })
+
+    # Fixed Prob vs Space-Saving comparisons
+    if fp_summary is not None:
+        fp_ranking = fp_summary.nlargest(n, 'mean_estimate')[['temperature', 'mean_estimate']]
+        fp_temps = fp_ranking['temperature'].tolist()
+
+        for k, ss_data in sorted(ss_by_k.items()):
+            monitored_items = ss_data.get('monitored_items', {})
+            ss_ranking = sorted(
+                [(int(temp), item['count']) for temp, item in monitored_items.items()],
+                key=lambda x: x[1],
+                reverse=True
+            )[:n]
+            ss_temps = [temp for temp, _ in ss_ranking]
+
+            common_temps = [t for t in fp_temps if t in ss_temps]
+
+            if len(common_temps) >= 2:
+                fp_ranks = [fp_temps.index(t) for t in common_temps]
+                ss_ranks = [ss_temps.index(t) for t in common_temps]
+
+                kendall_tau, kendall_p = stats.kendalltau(fp_ranks, ss_ranks)
+                spearman_rho, spearman_p = stats.spearmanr(fp_ranks, ss_ranks)
+
+                correlation_results.append({
+                    'comparison': f'Fixed Prob vs Space-Saving k={k}',
+                    'n_items': len(common_temps),
+                    'kendall_tau': kendall_tau,
+                    'kendall_p': kendall_p,
+                    'spearman_rho': spearman_rho,
+                    'spearman_p': spearman_p,
+                    'perfect_match': (fp_ranks == ss_ranks)
+                })
+
+    df = pd.DataFrame(correlation_results)
+
+    # Round for readability
+    if len(df) > 0:
+        df['kendall_tau'] = df['kendall_tau'].round(4)
+        df['kendall_p'] = df['kendall_p'].round(6)
+        df['spearman_rho'] = df['spearman_rho'].round(4)
+        df['spearman_p'] = df['spearman_p'].round(6)
+
+    return df
+
+
+def compare_top_and_bottom_n(
+    results: Dict[str, Any],
+    n_values: List[int] = [5, 10, 15, 20]
+) -> Dict[str, pd.DataFrame]:
+    """
+    Compare top-N most frequent AND bottom-N least frequent items
+    across all algorithms.
+
+    Addresses PDF requirement for analyzing both most and least frequent items.
+
+    Parameters
+    ----------
+    results : Dict[str, Any]
+        Results from load_all_results()
+    n_values : List[int], default=[5, 10, 15, 20]
+        List of n values to test
+
+    Returns
+    -------
+    Dict[str, pd.DataFrame]
+        Dictionary with keys:
+        - 'top_n_correlations': Ranking correlations for most frequent
+        - 'bottom_n_correlations': Ranking correlations for least frequent
+        - 'top_n_overlap': Set overlap metrics for top-N
+        - 'bottom_n_overlap': Set overlap metrics for bottom-N
+    """
+    all_results = {
+        'top_n_correlations': [],
+        'bottom_n_correlations': [],
+        'top_n_overlap': [],
+        'bottom_n_overlap': []
+    }
+
+    for n in n_values:
+        # Top-N (most frequent)
+        top_corr = calculate_ranking_correlation(results, n=n)
+        top_corr['n'] = n
+        top_corr['type'] = 'top_n'
+        all_results['top_n_correlations'].append(top_corr)
+
+        # Bottom-N (least frequent)
+        bottom_corr = calculate_ranking_correlation_bottom_n(results, n=n)
+        bottom_corr['n'] = n
+        bottom_corr['type'] = 'bottom_n'
+        all_results['bottom_n_correlations'].append(bottom_corr)
+
+    # Concatenate results
+    all_results['top_n_correlations'] = pd.concat(
+        all_results['top_n_correlations'], ignore_index=True
+    )
+    all_results['bottom_n_correlations'] = pd.concat(
+        all_results['bottom_n_correlations'], ignore_index=True
+    )
+
+    return all_results
+
+
+def calculate_ranking_correlation_bottom_n(
+    results: Dict[str, Any],
+    n: int = 20
+) -> pd.DataFrame:
+    """
+    Calculate ranking correlation for LEAST frequent items (bottom-N).
+
+    Parameters
+    ----------
+    results : Dict[str, Any]
+        Results from load_all_results()
+    n : int, default=20
+        Number of bottom items to compare
+
+    Returns
+    -------
+    pd.DataFrame
+        Ranking correlation results for least frequent items
+    """
+    exact_counts = results['exact']['counts_dict']
+    fp_summary = results['fixed_prob'].get('summary')
+    ss_by_k = results['space_saving'].get('by_k', {})
+
+    # Get exact ranking (ground truth) - ASCENDING for bottom-N
+    exact_ranking = sorted(exact_counts.items(), key=lambda x: x[1])[:n]
+    exact_temps = [temp for temp, _ in exact_ranking]
+
+    correlation_results = []
+
+    # Fixed Probability vs Exact
+    if fp_summary is not None:
+        fp_ranking = fp_summary.nsmallest(n, 'mean_estimate')[['temperature', 'mean_estimate']]
+        fp_temps = fp_ranking['temperature'].tolist()
+
+        common_temps = [t for t in exact_temps if t in fp_temps]
+
+        if len(common_temps) >= 2:
+            exact_ranks = [exact_temps.index(t) for t in common_temps]
+            fp_ranks = [fp_temps.index(t) for t in common_temps]
+
+            kendall_tau, kendall_p = stats.kendalltau(exact_ranks, fp_ranks)
+            spearman_rho, spearman_p = stats.spearmanr(exact_ranks, fp_ranks)
+
+            correlation_results.append({
+                'comparison': 'Exact vs Fixed Prob',
+                'n_items': len(common_temps),
+                'kendall_tau': kendall_tau,
+                'kendall_p': kendall_p,
+                'spearman_rho': spearman_rho,
+                'spearman_p': spearman_p,
+                'perfect_match': (exact_ranks == fp_ranks)
+            })
+
+    # Space-Saving vs Exact (bottom-N may not be monitored!)
+    for k, ss_data in sorted(ss_by_k.items()):
+        monitored_items = ss_data.get('monitored_items', {})
+
+        # For bottom-N, Space-Saving may not have these items
+        # Only compare if items are monitored
+        ss_ranking = sorted(
+            [(int(temp), item['count']) for temp, item in monitored_items.items()],
+            key=lambda x: x[1]
+        )[:n]
+        ss_temps = [temp for temp, _ in ss_ranking]
+
+        common_temps = [t for t in exact_temps if t in ss_temps]
+
+        if len(common_temps) >= 2:
+            exact_ranks = [exact_temps.index(t) for t in common_temps]
+            ss_ranks = [ss_temps.index(t) for t in common_temps]
+
+            kendall_tau, kendall_p = stats.kendalltau(exact_ranks, ss_ranks)
+            spearman_rho, spearman_p = stats.spearmanr(exact_ranks, ss_ranks)
+
+            correlation_results.append({
+                'comparison': f'Exact vs Space-Saving k={k}',
+                'n_items': len(common_temps),
+                'kendall_tau': kendall_tau,
+                'kendall_p': kendall_p,
+                'spearman_rho': spearman_rho,
+                'spearman_p': spearman_p,
+                'perfect_match': (exact_ranks == ss_ranks)
+            })
+
+    df = pd.DataFrame(correlation_results)
+
+    if len(df) > 0:
+        df['kendall_tau'] = df['kendall_tau'].round(4)
+        df['kendall_p'] = df['kendall_p'].round(6)
+        df['spearman_rho'] = df['spearman_rho'].round(4)
+        df['spearman_p'] = df['spearman_p'].round(6)
+
+    return df

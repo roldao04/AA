@@ -145,7 +145,9 @@ def plot_error_boxplots(
     cross_errors_df: pd.DataFrame,
     algorithms: List[str],
     output_dir: str = None,
-    filename: str = 'error_boxplots.png'
+    filename: str = 'error_boxplots.png',
+    max_error_threshold: float = None,
+    use_log_scale: bool = False
 ) -> plt.Figure:
     """
     Create box plots comparing error distributions across algorithms.
@@ -160,6 +162,10 @@ def plot_error_boxplots(
         Directory to save figure
     filename : str
         Output filename
+    max_error_threshold : float, optional
+        If specified, only include algorithms with mean error below this threshold
+    use_log_scale : bool, default=False
+        Use logarithmic scale for y-axis
 
     Returns
     -------
@@ -170,16 +176,29 @@ def plot_error_boxplots(
 
     # Collect error data
     error_data = []
+    alg_means = {}
+
     for alg in algorithms:
         if f'{alg}_rel_error' in cross_errors_df.columns:
             errors = cross_errors_df[f'{alg}_rel_error'].dropna() * 100  # Convert to percentage
+            alg_means[alg] = errors.mean()
+
             for err in errors:
                 error_data.append({
                     'Algorithm': alg.replace('_', ' ').replace('fp', 'Fixed Prob').replace('ss ', 'SS '),
-                    'Relative Error (%)': err
+                    'Relative Error (%)': err,
+                    'alg_code': alg
                 })
 
     error_df = pd.DataFrame(error_data)
+
+    # Filter if threshold specified
+    if max_error_threshold is not None:
+        filtered_algs = [alg for alg, mean in alg_means.items() if mean <= max_error_threshold]
+        error_df = error_df[error_df['alg_code'].isin(filtered_algs)]
+        title_suffix = f' (Mean Error ≤ {max_error_threshold:.0f}%)'
+    else:
+        title_suffix = ''
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -191,9 +210,15 @@ def plot_error_boxplots(
         palette='Set2'
     )
 
-    ax.set_title('Error Distribution Comparison Across Algorithms', fontsize=14, weight='bold')
+    if use_log_scale:
+        ax.set_yscale('log')
+        ax.set_ylabel('Relative Error (%) - Log Scale', fontsize=12)
+    else:
+        ax.set_ylabel('Relative Error (%)', fontsize=12)
+
+    ax.set_title(f'Error Distribution Comparison Across Algorithms{title_suffix}',
+                 fontsize=14, weight='bold')
     ax.set_xlabel('Algorithm', fontsize=12)
-    ax.set_ylabel('Relative Error (%)', fontsize=12)
     ax.grid(axis='y', alpha=0.3)
     plt.xticks(rotation=45, ha='right')
 
@@ -207,8 +232,10 @@ def plot_error_vs_frequency(
     cross_errors_df: pd.DataFrame,
     algorithms: List[Dict[str, str]],
     log_scale: bool = True,
+    log_scale_y: bool = False,
     output_dir: str = None,
-    filename: str = 'error_vs_frequency.png'
+    filename: str = 'error_vs_frequency.png',
+    max_y_limit: float = None
 ) -> plt.Figure:
     """
     Plot relative error vs true frequency for all algorithms.
@@ -220,11 +247,15 @@ def plot_error_vs_frequency(
     algorithms : List[Dict[str, str]]
         List of dicts with 'column', 'label', 'color', 'marker'
     log_scale : bool, default=True
-        Use log scale for frequency axis
+        Use log scale for frequency axis (x-axis)
+    log_scale_y : bool, default=False
+        Use log scale for error axis (y-axis)
     output_dir : str, optional
         Directory to save figure
     filename : str
         Output filename
+    max_y_limit : float, optional
+        Maximum y-axis limit to improve readability
 
     Returns
     -------
@@ -260,12 +291,24 @@ def plot_error_vs_frequency(
 
     if log_scale:
         ax.set_xscale('log')
+        xlabel = 'True Frequency (log scale)'
+    else:
+        xlabel = 'True Frequency'
 
-    ax.set_xlabel('True Frequency (log scale)' if log_scale else 'True Frequency', fontsize=12)
-    ax.set_ylabel('Relative Error (%)', fontsize=12)
+    if log_scale_y:
+        ax.set_yscale('log')
+        ylabel = 'Relative Error (%) - Log Scale'
+    else:
+        ylabel = 'Relative Error (%)'
+
+    ax.set_xlabel(xlabel, fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=12)
     ax.set_title('Relative Error vs True Frequency', fontsize=14, weight='bold')
     ax.legend(loc='best', framealpha=0.9)
     ax.grid(True, alpha=0.3)
+
+    if max_y_limit is not None and not log_scale_y:
+        ax.set_ylim(0, max_y_limit)
 
     if output_dir:
         save_figure(fig, filename, output_dir)
@@ -686,6 +729,228 @@ def plot_sensitivity_heatmap(
     ax.set_title(f'Sensitivity Analysis: {value_col}', fontsize=14, weight='bold')
     ax.set_xlabel(x_col, fontsize=12)
     ax.set_ylabel(y_col, fontsize=12)
+
+    if output_dir:
+        save_figure(fig, filename, output_dir)
+
+    return fig
+
+
+def plot_ranking_correlation_heatmap(
+    correlation_df: pd.DataFrame,
+    metric: str = 'kendall_tau',
+    output_dir: str = None,
+    filename: str = 'ranking_correlation_heatmap.png'
+) -> plt.Figure:
+    """
+    Create heatmap of ranking correlation metrics across algorithms.
+
+    Parameters
+    ----------
+    correlation_df : pd.DataFrame
+        Ranking correlation results from calculate_ranking_correlation()
+    metric : str, default='kendall_tau'
+        Which metric to plot ('kendall_tau' or 'spearman_rho')
+    output_dir : str, optional
+        Directory to save figure
+    filename : str
+        Output filename
+
+    Returns
+    -------
+    plt.Figure
+        The created figure
+    """
+    set_publication_style()
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+
+    # Prepare data for grouped bar chart
+    comparisons = correlation_df['comparison'].unique()
+    x = np.arange(len(comparisons))
+    width = 0.35
+
+    kendall_values = correlation_df['kendall_tau'].values
+    spearman_values = correlation_df['spearman_rho'].values
+
+    bars1 = ax.bar(x - width/2, kendall_values, width, label="Kendall's τ",
+                   color='#1976D2', alpha=0.8, edgecolor='black', linewidth=0.5)
+    bars2 = ax.bar(x + width/2, spearman_values, width, label="Spearman's ρ",
+                   color='#D32F2F', alpha=0.8, edgecolor='black', linewidth=0.5)
+
+    # Add value labels on bars
+    for bars in [bars1, bars2]:
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{height:.3f}',
+                   ha='center', va='bottom', fontsize=8)
+
+    ax.set_ylabel('Correlation Coefficient', fontsize=12)
+    ax.set_xlabel('Algorithm Comparison', fontsize=12)
+    ax.set_title('Ranking Correlation: Do Algorithms Rank Items in the Same Order?',
+                fontsize=14, weight='bold')
+    ax.set_xticks(x)
+    ax.set_xticklabels(comparisons, rotation=45, ha='right')
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    ax.axhline(y=1.0, color='green', linestyle='--', alpha=0.5, label='Perfect correlation')
+    ax.axhline(y=0.0, color='gray', linestyle='--', alpha=0.3)
+
+    plt.tight_layout()
+
+    if output_dir:
+        save_figure(fig, filename, output_dir)
+
+    return fig
+
+
+def plot_ranking_correlation_comparison(
+    top_n_df: pd.DataFrame,
+    bottom_n_df: pd.DataFrame = None,
+    output_dir: str = None,
+    filename: str = 'ranking_correlation_comparison.png'
+) -> plt.Figure:
+    """
+    Compare ranking correlations for top-N and bottom-N items.
+
+    Parameters
+    ----------
+    top_n_df : pd.DataFrame
+        Ranking correlations for most frequent items
+    bottom_n_df : pd.DataFrame, optional
+        Ranking correlations for least frequent items
+    output_dir : str, optional
+        Directory to save figure
+    filename : str
+        Output filename
+
+    Returns
+    -------
+    plt.Figure
+        The created figure
+    """
+    set_publication_style()
+
+    if bottom_n_df is not None:
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    else:
+        fig, axes = plt.subplots(1, 1, figsize=(10, 6))
+        axes = [axes]
+
+    # Top-N plot
+    ax = axes[0]
+    comparisons = top_n_df['comparison'].unique()
+    x = np.arange(len(comparisons))
+
+    kendall_values = top_n_df.groupby('comparison')['kendall_tau'].mean().values
+    spearman_values = top_n_df.groupby('comparison')['spearman_rho'].mean().values
+
+    width = 0.35
+    ax.bar(x - width/2, kendall_values, width, label="Kendall's τ",
+           color='#1976D2', alpha=0.8, edgecolor='black', linewidth=0.5)
+    ax.bar(x + width/2, spearman_values, width, label="Spearman's ρ",
+           color='#D32F2F', alpha=0.8, edgecolor='black', linewidth=0.5)
+
+    ax.set_ylabel('Correlation Coefficient', fontsize=12)
+    ax.set_title('Top-N Most Frequent Items', fontsize=13, weight='bold')
+    ax.set_xticks(x)
+    ax.set_xticklabels(comparisons, rotation=45, ha='right', fontsize=9)
+    ax.legend()
+    ax.grid(axis='y', alpha=0.3)
+    ax.axhline(y=1.0, color='green', linestyle='--', alpha=0.5)
+
+    # Bottom-N plot
+    if bottom_n_df is not None:
+        ax = axes[1]
+        comparisons = bottom_n_df['comparison'].unique()
+        x = np.arange(len(comparisons))
+
+        kendall_values = bottom_n_df.groupby('comparison')['kendall_tau'].mean().values
+        spearman_values = bottom_n_df.groupby('comparison')['spearman_rho'].mean().values
+
+        ax.bar(x - width/2, kendall_values, width, label="Kendall's τ",
+               color='#1976D2', alpha=0.8, edgecolor='black', linewidth=0.5)
+        ax.bar(x + width/2, spearman_values, width, label="Spearman's ρ",
+               color='#D32F2F', alpha=0.8, edgecolor='black', linewidth=0.5)
+
+        ax.set_ylabel('Correlation Coefficient', fontsize=12)
+        ax.set_title('Bottom-N Least Frequent Items', fontsize=13, weight='bold')
+        ax.set_xticks(x)
+        ax.set_xticklabels(comparisons, rotation=45, ha='right', fontsize=9)
+        ax.legend()
+        ax.grid(axis='y', alpha=0.3)
+        ax.axhline(y=1.0, color='green', linestyle='--', alpha=0.5)
+
+    plt.tight_layout()
+
+    if output_dir:
+        save_figure(fig, filename, output_dir)
+
+    return fig
+
+
+def plot_ranking_agreement_by_n(
+    correlation_df: pd.DataFrame,
+    output_dir: str = None,
+    filename: str = 'ranking_agreement_by_n.png'
+) -> plt.Figure:
+    """
+    Plot how ranking agreement changes with different n values.
+
+    Parameters
+    ----------
+    correlation_df : pd.DataFrame
+        Ranking correlation results with 'n' column
+    output_dir : str, optional
+        Directory to save figure
+    filename : str
+        Output filename
+
+    Returns
+    -------
+    plt.Figure
+        The created figure
+    """
+    set_publication_style()
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Group by comparison and n
+    comparisons = correlation_df['comparison'].unique()
+    colors = plt.cm.tab10(np.linspace(0, 1, len(comparisons)))
+
+    # Kendall's tau
+    ax = axes[0]
+    for i, comp in enumerate(comparisons):
+        comp_data = correlation_df[correlation_df['comparison'] == comp]
+        ax.plot(comp_data['n'], comp_data['kendall_tau'],
+                'o-', label=comp, color=colors[i], linewidth=2, markersize=6)
+
+    ax.set_xlabel('n (Number of Items)', fontsize=12)
+    ax.set_ylabel("Kendall's τ", fontsize=12)
+    ax.set_title("Ranking Agreement vs Query Size\n(Kendall's τ)",
+                fontsize=13, weight='bold')
+    ax.legend(fontsize=8, loc='best')
+    ax.grid(alpha=0.3)
+    ax.axhline(y=1.0, color='green', linestyle='--', alpha=0.5, label='Perfect')
+
+    # Spearman's rho
+    ax = axes[1]
+    for i, comp in enumerate(comparisons):
+        comp_data = correlation_df[correlation_df['comparison'] == comp]
+        ax.plot(comp_data['n'], comp_data['spearman_rho'],
+                's-', label=comp, color=colors[i], linewidth=2, markersize=6)
+
+    ax.set_xlabel('n (Number of Items)', fontsize=12)
+    ax.set_ylabel("Spearman's ρ", fontsize=12)
+    ax.set_title("Ranking Agreement vs Query Size\n(Spearman's ρ)",
+                fontsize=13, weight='bold')
+    ax.legend(fontsize=8, loc='best')
+    ax.grid(alpha=0.3)
+    ax.axhline(y=1.0, color='green', linestyle='--', alpha=0.5, label='Perfect')
+
+    plt.tight_layout()
 
     if output_dir:
         save_figure(fig, filename, output_dir)
