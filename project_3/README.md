@@ -33,7 +33,7 @@ Implementation and empirical analysis of approximate counting algorithms for str
 - **File:** `data/raw/porto.csv`
 - **Attribute:** `mintempC` (minimum daily temperature in Celsius)
 - **Size:** 3,946 observations
-- **Unique values:** 31 distinct temperatures
+- **Unique values:** 30 distinct temperatures
 
 ---
 
