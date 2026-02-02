@@ -1,4 +1,4 @@
-# Foundations of Machine Learning
+# Advanced Algorithms
 
 ## Performance Metrics
 
